@@ -1030,7 +1030,7 @@
   // turned — nothing can ever be placed somewhere the gecko cannot reach.
   const ARENA_R = GRID / 2;                 // cells: the disc fills the square canvas
   const PLAY_C = (GRID - 1) / 2;
-  const GECKO_R = ARENA_R - 0.6;            // how far from the middle the gecko may stand
+  const GECKO_R = ARENA_R - 1.8;            // far enough in that the tail stays on the board
   const PLAY_R = ARENA_R - 1.4;             // and how far out a fly may sit
   function arenaPath(g) {
     g.beginPath();
@@ -1722,8 +1722,8 @@
     dkctx.fillRect(0, 0, darkCv.width, darkCv.height);
     dkctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     dkctx.globalCompositeOperation = 'destination-out';
-    const hole = (cx, cy, r) => {
-      const g = dkctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
+    const hole = (cx, cy, r, core) => {
+      const g = dkctx.createRadialGradient(cx, cy, r * core, cx, cy, r);
       g.addColorStop(0, 'rgba(0,0,0,1)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       dkctx.fillStyle = g;
@@ -1731,8 +1731,8 @@
       dkctx.arc(cx, cy, r, 0, Math.PI * 2);
       dkctx.fill();
     };
-    lights.forEach(L => hole(L.x * cellSize, L.y * cellSize, L.r * cellSize));
-    if (pose) hole((pose.x + 0.5) * cellSize, (pose.y + 0.5) * cellSize, cellSize * 1.2);
+    lights.forEach(L => hole(L.x * cellSize, L.y * cellSize, L.r * cellSize, 0.4));
+    if (pose) hole((pose.x + 0.5) * cellSize, (pose.y + 0.5) * cellSize, cellSize * 2.5, 0.7);
     ctx.save();
     arenaPath(ctx);
     ctx.clip();
