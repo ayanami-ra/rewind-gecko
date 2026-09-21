@@ -653,7 +653,7 @@
     rafId = requestAnimationFrame(loop);
   }
   const HATCH_SHAKE = 550;    // ms: the egg trembles, cracks glowing brighter
-  const HATCH_BURST = 500;    // ms: the shell bursts open and the gecko scales in
+  const HATCH_BURST = 950;    // ms: the shell crumbles away pixel by pixel
   const HATCH_SETTLE = 220;   // ms: a beat to look at the gecko before play begins
   const HATCH_TOTAL = HATCH_SHAKE + HATCH_BURST + HATCH_SETTLE;
   let erosion = 0;       // 0 = normal, 1 = the negative has taken the whole board
@@ -1175,28 +1175,67 @@
     return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
   }
 
-  // one side of the broken shell, cut along the fracture and carried outward
-  function drawEggShard(side, cx, cy, scale, p) {
-    const alpha = Math.max(0, 1 - p * 1.15);
-    if (alpha <= 0) return;
-    const w = EGG_W * scale, h = EGG_H * scale;
-    const x0 = cx - w / 2, y0 = cy - h / 2;
-    const dirX = side, dirY = -0.65, n = Math.hypot(dirX, dirY);
-    const dist = p * p * 1.6 * cellSize;
-    const far = side < 0 ? x0 - scale : x0 + w + scale;
+  // ---- when the shell goes, it goes one pixel at a time, starting at the fracture ----
+  const FALL_SPAN = 0.34;              // how much of the burst a single pixel's fall takes
+
+  function splitColAt(py) {
+    if (py <= EGG_SPLIT[0].y) return EGG_SPLIT[0].x;
+    for (let i = 1; i < EGG_SPLIT.length; i++) {
+      const a = EGG_SPLIT[i - 1], b = EGG_SPLIT[i];
+      if (py <= b.y) return a.x + (b.x - a.x) * ((py - a.y) / (b.y - a.y));
+    }
+    return EGG_SPLIT[EGG_SPLIT.length - 1].x;
+  }
+
+  function splitDistance(px, py) {
+    let best = Infinity;
+    for (let i = 1; i < EGG_SPLIT.length; i++) {
+      const a = EGG_SPLIT[i - 1], b = EGG_SPLIT[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy)));
+      best = Math.min(best, Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t)));
+    }
+    return best;
+  }
+
+  const EGG_FALL = (() => {
+    const g = EGG_GRIDS[POKE_TARGET], out = [];
+    for (let y = 0; y < EGG_H; y++) {
+      for (let x = 0; x < EGG_W; x++) {
+        if (!g[y * EGG_W + x]) continue;
+        const side = x < splitColAt(y) ? -1 : 1;
+        out.push({
+          x, y,
+          t0: (splitDistance(x, y) / 13) * 0.34 + (1 - y / EGG_H) * 0.26 + Math.random() * 0.06,
+          vx: side * (0.3 + Math.random() * 1.1),
+          lift: Math.random() * 1.3
+        });
+      }
+    }
+    return out;
+  })();
+
+  function drawEggCrumble(cx, cy, scale, p) {
+    const dpr = canvas.width / Math.max(1, boardPx);
+    const snap = v => Math.round(v * dpr) / dpr;
+    const x0 = cx - EGG_W * scale / 2, y0 = cy - EGG_H * scale / 2;
+    const d = eggImg.data;
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate((dirX / n) * dist, (dirY / n) * dist);
-    ctx.beginPath();
-    ctx.moveTo(x0 + EGG_SPLIT[0].x * scale, y0 - scale);
-    for (const q of EGG_SPLIT) ctx.lineTo(x0 + q.x * scale, y0 + q.y * scale);
-    ctx.lineTo(x0 + EGG_SPLIT[EGG_SPLIT.length - 1].x * scale, y0 + h + scale);
-    ctx.lineTo(far, y0 + h + scale);
-    ctx.lineTo(far, y0 - scale);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(eggCv, x0, y0, w, h);
+    for (const q of EGG_FALL) {
+      const f = (p - q.t0) / FALL_SPAN;
+      if (f >= 1) continue;
+      let px = x0 + q.x * scale, py = y0 + q.y * scale;
+      if (f > 0) {
+        px += q.vx * f * 6 * scale;
+        py += (f * f * 34 - f * q.lift * 2) * scale;
+        ctx.globalAlpha = 1 - f;
+      } else {
+        ctx.globalAlpha = 1;
+      }
+      const o = (q.y * EGG_W + q.x) * 4;
+      ctx.fillStyle = 'rgb(' + d[o] + ',' + d[o + 1] + ',' + d[o + 2] + ')';
+      ctx.fillRect(snap(px), snap(py), scale, scale);
+    }
     ctx.restore();
   }
 
@@ -1213,16 +1252,16 @@
     }
     const p = Math.min(1, (e - HATCH_SHAKE) / HATCH_BURST);
     paintEggPixels(EGG_GRIDS[POKE_TARGET], -HATCH_SHAKE / 600);
-    if (p < 0.3) {
+    if (p < 0.2) {
       ctx.save();
-      ctx.globalAlpha = (1 - p / 0.3) * 0.55;
+      ctx.globalAlpha = (1 - p / 0.2) * 0.55;
       ctx.fillStyle = '#f2c94c';
       ctx.beginPath();
       ctx.arc(cx, cy, cellSize * 2.9, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
-    const emerge = Math.max(0.001, 0.08 + 0.92 * easeOutBack(p));
+    const emerge = Math.max(0.001, 0.08 + 0.92 * easeOutBack(Math.min(1, p / 0.6)));
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(emerge, emerge);
@@ -1230,8 +1269,7 @@
     const pose = poseGecko();
     if (pose) renderGecko(pose);
     ctx.restore();
-    drawEggShard(-1, cx, cy, scale, p);
-    drawEggShard(1, cx, cy, scale, p);
+    drawEggCrumble(cx, cy, scale, p);
   }
 
   // ================= drawing =================
@@ -1340,17 +1378,18 @@
     const bottom = GRID * cellSize - cellSize * 0.1;
     ctx.font = Math.round(cellSize * 1.4) + 'px ' + GAME_FONT;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillStyle = 'rgba(' + tint + ',' + (rewinding ? 0.55 : 0.45) + ')';
+    ctx.fillStyle = 'rgba(' + tint + ',' + (rewinding ? 0.6 : 0.5) + ')';
     ctx.fillText(label, right, bottom);
 
-    // how much of the phase is still to come, standing faintly beside the number
-    const left = right - ctx.measureText(label).width - cellSize * 0.42;
-    const h = cellSize * 1.02, w = Math.max(2, cellSize * 0.09);
+    // how much of the phase is still to come, running along beside the number
+    const w = cellSize * 5.2, h = cellSize * 0.42;
+    const x = right - ctx.measureText(label).width - cellSize * 0.5 - w;
+    const y = bottom - cellSize * 0.5 - h / 2;
     const remain = Math.max(0, Math.min(1, (rewinding ? clock : duration - clock) / duration));
-    ctx.fillStyle = 'rgba(' + tint + ',0.10)';
-    ctx.fillRect(left, bottom - h, w, h);
-    ctx.fillStyle = 'rgba(' + tint + ',0.28)';
-    ctx.fillRect(left, bottom - h * remain, w, h * remain);
+    ctx.fillStyle = 'rgba(' + tint + ',0.16)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(' + tint + ',0.62)';
+    ctx.fillRect(x, y, w * remain, h);
   }
 
   function stepEffects(dt) {
