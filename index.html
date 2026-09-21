@@ -75,7 +75,9 @@
     position: absolute; inset: 0; display: none;
     flex-direction: column; align-items: center; justify-content: center;
     background: rgba(8,8,10,0.86); text-align: center; padding: 20px;
+    transition: background 0.4s;
   }
+  #msg.boot { justify-content: space-between; background: rgba(8,8,10,0.30); }
   #msg h2 { margin: 0 0 10px 0; font-size: 26px; font-weight: 400; letter-spacing: 0.06em; }
   #msg p { white-space: pre-line; margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; max-width: 30em; }
   #msg button {
@@ -215,6 +217,7 @@
 
   function renderMsg() {
     const s = STR[lang];
+    msgEl.classList.toggle('boot', msgState.kind === 'boot');
     if (msgState.kind === 'boot') {
       msgTitle.textContent = s.title;
       msgText.textContent = '';
@@ -638,7 +641,7 @@
   const BLUE_WINDOW = 1.1;    // seconds of slack around a blue fly's timestamp
 
   let stage = 1;
-  let phase = 'idle';         // idle | forward | rewind | done
+  let phase = 'idle';         // idle | hatch | forward | rewind | done
   let clock = 0;              // seconds elapsed in the current phase
   let duration = 14;          // length of the forward phase
   let gecko = null;
@@ -646,6 +649,16 @@
   let whites = [];
   let blues = [];
   let lastFrame = 0;
+  let hatchStart = 0;
+  let rafId = 0;         // only one animation-frame chain may ever be pending
+  function scheduleFrame() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loop);
+  }
+  const HATCH_SHAKE = 550;    // ms: the egg trembles, cracks glowing brighter
+  const HATCH_BURST = 500;    // ms: the shell bursts open and the gecko scales in
+  const HATCH_SETTLE = 220;   // ms: a beat to look at the gecko before play begins
+  const HATCH_TOTAL = HATCH_SHAKE + HATCH_BURST + HATCH_SETTLE;
   let erosion = 0;       // 0 = normal, 1 = the negative has taken the whole board
   let seeds = [];        // where the inversion starts creeping from
 
@@ -777,7 +790,15 @@
     stickEl.classList.remove('locked');
     msgEl.style.display = 'none';
     lastFrame = 0;
-    requestAnimationFrame(loop);
+    scheduleFrame();
+  }
+
+  function startHatch() {
+    buildStage();
+    phase = 'hatch';
+    hatchStart = 0;
+    msgEl.style.display = 'none';
+    scheduleFrame();
   }
 
   function startRewind() {
@@ -964,6 +985,207 @@
     if (clock <= 0) finish();
   }
 
+  // ================= title egg =================
+  // A small deterministic PRNG so the shell's markings stay put between frames.
+  function makeRand(seed) {
+    let s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const EGG_RX = 1.05, EGG_RY = 1.55;   // half-size of the egg, in cells
+  function eggOutline(n) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rx = Math.sin(a), ry = -Math.cos(a);
+      const taper = ry < 0 ? 1 + 0.34 * ry : 1;   // narrower top, round bottom
+      pts.push({ x: EGG_RX * rx * taper, y: EGG_RY * ry });
+    }
+    return pts;
+  }
+  const EGG_PATH = eggOutline(40);
+
+  const eggRand = makeRand(20260921);
+  // speckles and ridge streaks, echoing the gecko's own dappled markings
+  const EGG_SPECKLES = Array.from({ length: 22 }, () => {
+    const a = eggRand() * Math.PI * 2, r = Math.sqrt(eggRand());
+    return {
+      x: EGG_RX * 0.82 * r * Math.sin(a),
+      y: EGG_RY * 0.88 * r * -Math.cos(a),
+      s: 0.045 + eggRand() * 0.075,
+      rot: eggRand() * Math.PI
+    };
+  });
+  const EGG_STREAKS = [
+    { x: -0.18, y0: -1.10, y1: -0.35, w: 0.05 },
+    { x: 0.24, y0: -0.15, y1: 0.75, w: 0.045 },
+    { x: -0.42, y0: -0.05, y1: 0.55, w: 0.035 }
+  ];
+  function jaggedPath(x0, y0, x1, y1, n, jitter, seed) {
+    const r = makeRand(seed);
+    const nx = -(y1 - y0), ny = (x1 - x0);
+    const nl = Math.hypot(nx, ny) || 1;
+    const pts = [{ x: x0, y: y0 }];
+    for (let i = 1; i < n; i++) {
+      const u = i / n;
+      const j = (r() - 0.5) * jitter;
+      pts.push({ x: x0 + (x1 - x0) * u + (nx / nl) * j, y: y0 + (y1 - y0) * u + (ny / nl) * j });
+    }
+    pts.push({ x: x1, y: y1 });
+    return pts;
+  }
+  const EGG_CRACKS = [
+    jaggedPath(-0.10, -1.45, 0.30, -0.25, 6, 0.16, 7),
+    jaggedPath(0.05, -1.30, -0.35, 0.05, 5, 0.14, 13),
+    jaggedPath(0.30, -0.60, 0.55, -1.10, 4, 0.10, 29)
+  ];
+
+  function strokePath(pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+
+  // draws the whole egg in local unit space (1 unit = 1 cell), centred on the origin
+  function drawEggShape(alpha, glow) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    const outline = () => {
+      ctx.beginPath();
+      ctx.moveTo(EGG_PATH[0].x, EGG_PATH[0].y);
+      for (let i = 1; i < EGG_PATH.length; i++) ctx.lineTo(EGG_PATH[i].x, EGG_PATH[i].y);
+      ctx.closePath();
+    };
+
+    outline();
+    const grad = ctx.createRadialGradient(-EGG_RX * 0.3, -EGG_RY * 0.35, 0.1, 0, 0, EGG_RY * 1.15);
+    grad.addColorStop(0, '#f7f1e2');
+    grad.addColorStop(1, '#cfc4a4');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.save();
+    outline();
+    ctx.clip();
+    ctx.fillStyle = 'rgba(42,38,30,0.55)';
+    EGG_SPECKLES.forEach(sp => {
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.rotate(sp.rot);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, sp.s, sp.s * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+    ctx.strokeStyle = 'rgba(42,38,30,0.4)';
+    ctx.lineCap = 'round';
+    EGG_STREAKS.forEach(st => {
+      ctx.lineWidth = st.w;
+      ctx.beginPath();
+      ctx.moveTo(st.x, st.y0);
+      ctx.quadraticCurveTo(st.x + 0.1, (st.y0 + st.y1) / 2, st.x, st.y1);
+      ctx.stroke();
+    });
+    ctx.restore();
+
+    outline();
+    ctx.lineWidth = 0.045;
+    ctx.strokeStyle = 'rgba(20,18,14,0.85)';
+    ctx.stroke();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(20,16,12,0.9)';
+    ctx.lineWidth = 0.032;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (glow > 0) {
+      ctx.shadowColor = 'rgba(242,201,76,0.95)';
+      ctx.shadowBlur = 0.10 + 0.16 * glow;
+    }
+    EGG_CRACKS.forEach(strokePath);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function drawEggAt(cx, cy, angle, scaleUnit, alpha, glow) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.scale(scaleUnit, scaleUnit);
+    drawEggShape(alpha, glow);
+    ctx.restore();
+  }
+
+  // one half of the broken shell, clipped and carried outward as it flies apart
+  function drawEggShard(side, cx, cy, scaleUnit, p) {
+    const alpha = Math.max(0, 1 - p * 1.15);
+    if (alpha <= 0) return;
+    const dirX = side, dirY = -0.65;
+    const norm = Math.hypot(dirX, dirY);
+    const dist = p * p * 1.6;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.translate((dirX / norm) * dist * scaleUnit, (dirY / norm) * dist * scaleUnit);
+    ctx.rotate(side * p * 1.3);
+    ctx.scale(scaleUnit, scaleUnit);
+    ctx.beginPath();
+    ctx.rect(side < 0 ? -2.2 : 0, -2.4, 2.2, 4.8);
+    ctx.clip();
+    drawEggShape(alpha, 0);
+    ctx.restore();
+  }
+
+  function drawEggIdle(now) {
+    const cx = boardPx / 2, cy = boardPx / 2;
+    const angle = Math.sin(now / 900) * 0.09;
+    const bob = Math.sin(now / 900) * cellSize * 0.02;
+    const glow = 0.5 + 0.5 * Math.sin(now / 500);
+    drawEggAt(cx, cy + bob, angle, cellSize, 1, glow);
+  }
+
+  function easeOutBack(x) {
+    const c1 = 1.4, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+
+  function drawHatch(e) {
+    const cx = boardPx / 2, cy = boardPx / 2;
+    if (e < HATCH_SHAKE) {
+      const p = e / HATCH_SHAKE;
+      const angle = Math.sin(e / 55) * (0.05 + 0.22 * p);
+      const bob = Math.sin(e / 70) * cellSize * 0.05 * p;
+      drawEggAt(cx, cy + bob, angle, cellSize, 1, 0.3 + 0.7 * p);
+      return;
+    }
+    const p = Math.min(1, (e - HATCH_SHAKE) / HATCH_BURST);
+    if (p < 0.3) {
+      ctx.save();
+      ctx.globalAlpha = (1 - p / 0.3) * 0.55;
+      ctx.fillStyle = '#f2c94c';
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    const emerge = Math.max(0.001, 0.08 + 0.92 * easeOutBack(p));
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(emerge, emerge);
+    ctx.translate(-cx, -cy);
+    const pose = poseGecko();
+    if (pose) renderGecko(pose);
+    ctx.restore();
+    drawEggShard(-1, cx, cy, cellSize, p);
+    drawEggShard(1, cx, cy, cellSize, p);
+  }
+
   // ================= drawing =================
   function drawBoard() {
     for (let gx = 0; gx < GRID; gx++) {
@@ -1143,23 +1365,32 @@
 
   function draw(now) {
     drawBoard();
+    if (phase === 'idle') { drawFlies(now); drawEggIdle(now); return; }
+    if (phase === 'hatch') { drawHatch(now - hatchStart); return; }
     drawFlies(now);
     const pose = poseGecko();
     drawGhost(pose, now);
     if (pose) renderGecko(pose);
     drawClock(now);
     applyInversion(now);
-    const frac = phase === 'rewind' ? clock / duration : clock / duration;
+    const frac = clock / duration;
     barEl.style.width = (frac * 100) + '%';
   }
 
   function loop(t) {
-    if (phase === 'idle') { draw(t); return; }
+    if (phase === 'idle') { draw(t); scheduleFrame(); return; }
+    if (phase === 'hatch') {
+      if (!hatchStart) hatchStart = t;
+      if (t - hatchStart >= HATCH_TOTAL) { startForward(); return; }
+      draw(t);
+      scheduleFrame();
+      return;
+    }
     if (phase === 'done') {
       if (!lastFrame) lastFrame = t;
       lastFrame = t;
       draw(t);
-      requestAnimationFrame(loop);
+      scheduleFrame();
       return;
     }
     if (!lastFrame) lastFrame = t;
@@ -1168,7 +1399,7 @@
     if (phase === 'forward') updateForward(dt); else updateRewind(dt);
     stepEffects(dt);
     draw(t);
-    requestAnimationFrame(loop);
+    scheduleFrame();
   }
 
   // ================= input =================
@@ -1222,7 +1453,10 @@
     const d = keyMap[e.key]; if (d) { e.preventDefault(); pressed[d] = false; }
   });
 
-  msgBtn.addEventListener('click', () => { buildStage(); startForward(); });
+  msgBtn.addEventListener('click', () => {
+    if (msgState.kind === 'boot') startHatch();
+    else { buildStage(); startForward(); }
+  });
   window.addEventListener('resize', resize);
 
   // ================= boot =================
@@ -1233,8 +1467,7 @@
   applyLang();
   hintEl.textContent = HINT.idle;
   msgEl.style.display = 'flex';
-  draw(0);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (phase === 'idle') draw(0); });
+  scheduleFrame();
 })();
 </script>
 </body>
