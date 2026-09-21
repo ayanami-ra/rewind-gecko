@@ -37,7 +37,12 @@
     display: flex; justify-content: space-between; align-items: baseline;
     width: 100%; max-width: 460px; margin-bottom: 4px;
   }
-  #title { font-size: 20px; letter-spacing: 0.08em; }
+  #gearBtn {
+    background: transparent; border: 1px solid #4a4b50; border-radius: 7px;
+    color: var(--cream); padding: 4px 7px; line-height: 0; cursor: pointer;
+  }
+  #gearBtn:hover { border-color: var(--gold); color: var(--gold); }
+  body.rewinding #gearBtn { color: #1a1b1e; border-color: #a5a299; }
   #topRight { display: flex; align-items: baseline; gap: 10px; }
   #stageLabel { font-size: 15px; }
   #langBtn {
@@ -92,8 +97,8 @@
     box-shadow: 0 3px 8px rgba(0,0,0,0.5);
   }
   #controls {
-    margin-top: 12px; width: 100%; max-width: 460px;
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 14px; width: 100%; max-width: 460px;
+    display: flex; align-items: center; justify-content: center;
   }
   #controls button {
     background: transparent; color: var(--cream); border: 1px solid #4a4b50;
@@ -101,12 +106,32 @@
     cursor: pointer;
   }
   #controls button:disabled { opacity: 0.35; }
-  .seg { display: flex; align-items: center; gap: 6px; }
-  .seg > span { font-size: 12px; opacity: 0.7; }
-  .seg button { padding: 7px 9px; }
-  .seg button.on { background: var(--gold); color: #111; border-color: var(--gold); }
   body.rewinding #controls button { color: #1a1b1e; border-color: #a5a299; }
-  body.rewinding .seg button.on { background: var(--gold); border-color: var(--gold); }
+  #settings {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(6,6,8,0.62); padding: 20px;
+  }
+  #settings.on { display: flex; }
+  #settingsCard {
+    width: 100%; max-width: 340px; background: var(--panel); color: var(--cream);
+    border-radius: 14px; padding: 18px 18px 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  }
+  #settingsCard h3 { margin: 0 0 14px; font-size: 18px; font-weight: 400; letter-spacing: 0.06em; }
+  .setRow { margin-bottom: 14px; }
+  .setRow > span { display: block; font-size: 12px; opacity: 0.7; margin-bottom: 7px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 7px; }
+  .seg button {
+    flex: 1 1 auto; background: transparent; color: var(--cream);
+    border: 1px solid #56575d; border-radius: 7px; padding: 9px 8px;
+    font-size: 13px; letter-spacing: 0.04em; cursor: pointer;
+  }
+  .seg button.on { background: var(--gold); color: #111; border-color: var(--gold); }
+  #setClose {
+    width: 100%; margin-top: 4px; background: transparent; color: var(--cream);
+    border: 1px solid #56575d; border-radius: 7px; padding: 10px; font-size: 14px; cursor: pointer;
+  }
   body.rewinding { background: var(--inv); }
   body.rewinding #app { color: #1a1b1e; }
   #app, body, #boardWrap { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
@@ -117,7 +142,14 @@
 <body>
 <div id="app">
   <div id="top">
-    <div id="title">回帰性家守</div>
+    <button id="gearBtn" type="button" aria-label="settings">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3.2"/>
+        <circle cx="12" cy="12" r="6.9"/>
+        <path d="M12 2.4v2.7M12 18.9v2.7M21.6 12h-2.7M5.1 12H2.4M18.8 5.2l-1.9 1.9M7.1 16.9l-1.9 1.9M18.8 18.8l-1.9-1.9M7.1 7.1L5.2 5.2"/>
+      </svg>
+    </button>
     <div id="topRight">
       <div id="stageLabel"><span id="stageWord">ステージ</span> <span id="stage">1</span></div>
       <button id="langBtn" type="button">EN</button>
@@ -140,17 +172,28 @@
   </div>
   <div id="controls">
     <button id="resetBtn" type="button">リセット</button>
-    <div class="seg">
-      <span id="speedWord">逆行</span>
-      <button type="button" data-sp="1" class="on">&times;1</button>
-      <button type="button" data-sp="1.5">&times;1.5</button>
-      <button type="button" data-sp="2">&times;2</button>
-    </div>
-    <button id="themeBtn" type="button">配色</button>
   </div>
   <div id="hint"></div>
 </div>
 <div id="pad"><div id="padKnob"></div></div>
+<div id="settings">
+  <div id="settingsCard">
+    <h3 id="setTitle">設定</h3>
+    <div class="setRow">
+      <span id="speedWord">逆行の速さ</span>
+      <div class="seg" id="speedSeg">
+        <button type="button" data-sp="1" class="on">&times;1</button>
+        <button type="button" data-sp="1.5">&times;1.5</button>
+        <button type="button" data-sp="2">&times;2</button>
+      </div>
+    </div>
+    <div class="setRow">
+      <span id="themeWord">配色</span>
+      <div class="seg" id="themeSeg"></div>
+    </div>
+    <button id="setClose" type="button">閉じる</button>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -173,10 +216,14 @@
     done: ''
   };
   const resetBtn = document.getElementById('resetBtn');
-  const themeBtn = document.getElementById('themeBtn');
+  const gearBtn = document.getElementById('gearBtn');
+  const settingsEl = document.getElementById('settings');
+  const setClose = document.getElementById('setClose');
+  const setTitleEl = document.getElementById('setTitle');
   const speedWordEl = document.getElementById('speedWord');
-  const speedBtns = Array.from(document.querySelectorAll('.seg button'));
-  const titleEl = document.getElementById('title');
+  const themeWordEl = document.getElementById('themeWord');
+  const themeSeg = document.getElementById('themeSeg');
+  const speedBtns = Array.from(document.querySelectorAll('#speedSeg button'));
   const stageWordEl = document.getElementById('stageWord');
   const langBtn = document.getElementById('langBtn');
 
@@ -200,7 +247,11 @@
       winText: '全30ステージ走りきった。時間を丸ごと食べ尽くした！',
       again: 'もう一度',
       reset: 'リセット',
-      speedWord: '逆行',
+      settings: '設定',
+      speedWord: '逆行の速さ',
+      themeWord: '配色',
+      close: '閉じる',
+      readyHint: '動かすと時間が流れだす',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -231,7 +282,11 @@
       winText: 'All 30 stages run — you ate the whole timeline!',
       again: 'Play again',
       reset: 'Reset',
-      speedWord: 'Rewind',
+      settings: 'Settings',
+      speedWord: 'Rewind speed',
+      themeWord: 'Palette',
+      close: 'Close',
+      readyHint: 'Move to start the clock',
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -267,6 +322,18 @@
   let themeIndex = 0;
   let TH = THEMES[0];
 
+  function renderThemeSeg() {
+    themeSeg.innerHTML = '';
+    THEMES.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = t.name[lang];
+      if (i === themeIndex) b.classList.add('on');
+      b.addEventListener('click', () => { themeIndex = i; applyTheme(); });
+      themeSeg.appendChild(b);
+    });
+  }
+
   function applyTheme() {
     TH = THEMES[themeIndex];
     const r = document.documentElement.style;
@@ -274,8 +341,8 @@
     r.setProperty('--gold', rgb(TH.gold));
     r.setProperty('--blue', rgb(TH.blue));
     r.setProperty('--inv', TH.inv);
-    themeBtn.textContent = TH.name[lang];
     EGG_RAMP = eggRamp();
+    renderThemeSeg();
   }
 
   function renderMsg() {
@@ -311,12 +378,14 @@
 
   function applyLang() {
     const s = STR[lang];
-    titleEl.textContent = s.title;
     stageWordEl.textContent = s.stageWord;
     langBtn.textContent = s.langBtn;
     resetBtn.textContent = s.reset;
+    setTitleEl.textContent = s.settings;
     speedWordEl.textContent = s.speedWord;
-    themeBtn.textContent = TH.name[lang];
+    themeWordEl.textContent = s.themeWord;
+    setClose.textContent = s.close;
+    renderThemeSeg();
     document.title = s.title;
     renderMsg();
   }
@@ -725,6 +794,7 @@
   let blues = [];
   let lastFrame = 0;
   let hatchStart = 0;
+  let started = false;      // the run holds still until the gecko is first pushed
   let rewindSpeed = 1;      // how fast the rewind replays the run
   let rafId = 0;         // only one animation-frame chain may ever be pending
   function scheduleFrame() {
@@ -861,6 +931,7 @@
 
   function startForward() {
     phase = 'forward';
+    started = false;
     phaseEl.textContent = '▶ 前進';
     hintEl.textContent = HINT.forward;
     phaseEl.className = 'forward';
@@ -1017,6 +1088,12 @@
 
     let mag = Math.min(1, Math.hypot(dx, dy));
     gecko.moving = mag > 0.02;
+
+    // nothing runs until the first push, so the board can be read at leisure
+    if (!started) {
+      if (!gecko.moving) return;
+      started = true;
+    }
 
     if (gecko.moving) {
       let ux = dx / mag, uy = dy / mag;
@@ -1530,6 +1607,17 @@
 
   }
 
+  // told on the board itself, since the message panel is down while playing
+  function drawReady(now) {
+    ctx.save();
+    ctx.globalAlpha = 0.55 + 0.25 * Math.sin(now / 420);
+    ctx.fillStyle = rgb(lift(TH.gold, 0.35));
+    ctx.font = Math.round(cellSize * 0.52) + 'px ' + GAME_FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(STR[lang].readyHint, boardPx / 2, boardPx / 2 + cellSize * 3.3);
+    ctx.restore();
+  }
+
   function drawClock() {
     const rewinding = phase === 'rewind';
     const tint = rewinding ? TH.blue : TH.gold;
@@ -1696,6 +1784,7 @@
     applyDarkness(pose);
     applyInversion(now);
     drawClock();
+    if (phase === 'forward' && !started) drawReady(now);
   }
 
   function loop(t) {
@@ -1746,7 +1835,8 @@
   }
   const padKnob = document.getElementById('padKnob');
   document.addEventListener('pointerdown', e => {
-    if (phase !== 'forward' || stick.active || e.target.closest('button')) return;
+    if (phase !== 'forward' || stick.active || settingsEl.classList.contains('on')) return;
+    if (e.target.closest('button')) return;
     stick.active = true; stick.id = e.pointerId;
     stick.ox = e.clientX; stick.oy = e.clientY;
     padEl.classList.add('on');
@@ -1787,9 +1877,10 @@
     speedBtns.forEach(o => o.classList.toggle('on', o === b));
   }));
 
-  themeBtn.addEventListener('click', () => {
-    themeIndex = (themeIndex + 1) % THEMES.length;
-    applyTheme();
+  gearBtn.addEventListener('click', () => settingsEl.classList.add('on'));
+  setClose.addEventListener('click', () => settingsEl.classList.remove('on'));
+  settingsEl.addEventListener('click', e => {
+    if (e.target === settingsEl) settingsEl.classList.remove('on');
   });
 
   // the shell gives a little more each time it is struck, then breaks open
