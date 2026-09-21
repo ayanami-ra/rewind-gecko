@@ -251,7 +251,6 @@
       speedWord: '逆行の速さ',
       themeWord: '配色',
       close: '閉じる',
-      readyHint: '動かすと時間が流れだす',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -286,7 +285,6 @@
       speedWord: 'Rewind speed',
       themeWord: 'Palette',
       close: 'Close',
-      readyHint: 'Move to start the clock',
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -1607,17 +1605,6 @@
 
   }
 
-  // told on the board itself, since the message panel is down while playing
-  function drawReady(now) {
-    ctx.save();
-    ctx.globalAlpha = 0.55 + 0.25 * Math.sin(now / 420);
-    ctx.fillStyle = rgb(lift(TH.gold, 0.35));
-    ctx.font = Math.round(cellSize * 0.52) + 'px ' + GAME_FONT;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(STR[lang].readyHint, boardPx / 2, boardPx / 2 + cellSize * 3.3);
-    ctx.restore();
-  }
-
   function drawClock() {
     const rewinding = phase === 'rewind';
     const tint = rewinding ? TH.blue : TH.gold;
@@ -1784,7 +1771,6 @@
     applyDarkness(pose);
     applyInversion(now);
     drawClock();
-    if (phase === 'forward' && !started) drawReady(now);
   }
 
   function loop(t) {
