@@ -15,6 +15,7 @@
     --cream: #efe8d5;
     --gold: #f2c94c;
     --blue: #6fd3f2;
+    --inv: #e9e6dc;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -24,6 +25,7 @@
     height: 100%; margin: 0; background: var(--bg);
     font-family: "DotGothic16", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
     color: var(--cream); overflow: hidden; touch-action: none;
+    user-select: none; -webkit-user-select: none;
   }
   #app {
     height: 100%; display: flex; flex-direction: column; align-items: center;
@@ -61,8 +63,6 @@
   body.rewinding #phase.rewind { color: #1f6f8a; }
   #boardWrap {
     position: relative; width: 100%; max-width: 460px; aspect-ratio: 1/1;
-    border-radius: 12px; overflow: hidden;
-    box-shadow: 0 0 0 2px #000, 0 8px 24px rgba(0,0,0,0.5);
   }
   canvas { display: block; width: 100%; height: 100%; }
   #msg {
@@ -78,34 +78,38 @@
     background: var(--gold); color: #111; border: none; border-radius: 8px;
     padding: 10px 20px; font-size: 17px; letter-spacing: 0.08em;
   }
-  #stickWrap {
-    margin-top: 14px; display: flex; justify-content: center;
-    width: 100%; max-width: 460px;
+  /* the pad is drawn wherever a finger lands, so any part of the screen steers */
+  #pad {
+    position: fixed; left: 0; top: 0; width: 132px; height: 132px;
+    margin: -66px 0 0 -66px; border-radius: 50%; display: none;
+    border: 2px solid rgba(239,232,213,0.35); background: rgba(20,21,24,0.30);
+    pointer-events: none; z-index: 5;
   }
-  #stick {
-    position: relative; width: 146px; height: 146px; border-radius: 50%;
-    background: radial-gradient(circle at 50% 45%, #303137, #1b1c20 70%);
-    border: 2px solid #3a3b40; box-shadow: inset 0 2px 10px rgba(0,0,0,0.6);
-    touch-action: none; user-select: none; -webkit-user-select: none;
-    transition: opacity 0.25s;
+  #pad.on { display: block; }
+  #padKnob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px;
+    margin: -27px 0 0 -27px; border-radius: 50%; background: var(--gold);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
   }
-  #stick.locked { opacity: 0.3; }
-  #knob {
-    position: absolute; left: 50%; top: 50%; width: 62px; height: 62px;
-    margin: -31px 0 0 -31px; border-radius: 50%;
-    background: radial-gradient(circle at 40% 35%, #f4efe0, #cdc6b2);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.5); pointer-events: none;
+  #controls {
+    margin-top: 12px; width: 100%; max-width: 460px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
-  #stick.active #knob { background: radial-gradient(circle at 40% 35%, #ffe796, #e0b83c); }
-  body.rewinding { background: #e9e6dc; }
+  #controls button {
+    background: transparent; color: var(--cream); border: 1px solid #4a4b50;
+    border-radius: 7px; padding: 7px 11px; font-size: 13px; letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #controls button:disabled { opacity: 0.35; }
+  .seg { display: flex; align-items: center; gap: 6px; }
+  .seg > span { font-size: 12px; opacity: 0.7; }
+  .seg button { padding: 7px 9px; }
+  .seg button.on { background: var(--gold); color: #111; border-color: var(--gold); }
+  body.rewinding #controls button { color: #1a1b1e; border-color: #a5a299; }
+  body.rewinding .seg button.on { background: var(--gold); border-color: var(--gold); }
+  body.rewinding { background: var(--inv); }
   body.rewinding #app { color: #1a1b1e; }
-  body.rewinding #boardWrap { box-shadow: 0 0 0 2px #fff, 0 8px 24px rgba(0,0,0,0.25); }
-  body.rewinding #stick {
-    background: radial-gradient(circle at 50% 45%, #d3d0c6, #b4b1a7 70%);
-    border-color: #a5a299;
-  }
-  body.rewinding #knob { background: radial-gradient(circle at 40% 35%, #2b2c31, #17181b); }
-  #app, body, #boardWrap, #stick, #knob { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
+  #app, body, #boardWrap { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
   #hint { margin-top: 10px; min-height: 1.6em; font-size: 14px; opacity: 0.85; text-align: center; line-height: 1.6; }
   #hud, #hint { display: none; }
 </style>
@@ -134,9 +138,19 @@
       <button id="msgBtn">スタート</button>
     </div>
   </div>
-  <div id="stickWrap"><div id="stick"><div id="knob"></div></div></div>
+  <div id="controls">
+    <button id="resetBtn" type="button">リセット</button>
+    <div class="seg">
+      <span id="speedWord">逆行</span>
+      <button type="button" data-sp="1" class="on">&times;1</button>
+      <button type="button" data-sp="1.5">&times;1.5</button>
+      <button type="button" data-sp="2">&times;2</button>
+    </div>
+    <button id="themeBtn" type="button">配色</button>
+  </div>
   <div id="hint"></div>
 </div>
+<div id="pad"><div id="padKnob"></div></div>
 
 <script>
 (function () {
@@ -150,7 +164,7 @@
   const msgTitle = document.getElementById('msgTitle');
   const msgText = document.getElementById('msgText');
   const msgBtn = document.getElementById('msgBtn');
-  const stickEl = document.getElementById('stick');
+  const padEl = document.getElementById('pad');
   const hintEl = document.getElementById('hint');
   const HINT = {
     idle: 'スティックを倒すと歩きだす',
@@ -158,7 +172,10 @@
     rewind: '',
     done: ''
   };
-  const knobEl = document.getElementById('knob');
+  const resetBtn = document.getElementById('resetBtn');
+  const themeBtn = document.getElementById('themeBtn');
+  const speedWordEl = document.getElementById('speedWord');
+  const speedBtns = Array.from(document.querySelectorAll('.seg button'));
   const titleEl = document.getElementById('title');
   const stageWordEl = document.getElementById('stageWord');
   const langBtn = document.getElementById('langBtn');
@@ -182,6 +199,8 @@
       winTitle: 'Congratulations!',
       winText: '全30ステージ走りきった。時間を丸ごと食べ尽くした！',
       again: 'もう一度',
+      reset: 'リセット',
+      speedWord: '逆行',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -211,6 +230,8 @@
       winTitle: 'Congratulations!',
       winText: 'All 30 stages run — you ate the whole timeline!',
       again: 'Play again',
+      reset: 'Reset',
+      speedWord: 'Rewind',
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -225,6 +246,37 @@
   };
   let lang = 'ja';
   let msgState = { kind: 'boot' };
+
+  const rgb = c => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+  const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+  const lift = (c, k) => c.map(v => Math.round(v + (255 - v) * k));
+  const dim = (c, k) => c.map(v => Math.round(v * k));
+
+  // Warm accent marks the run forward, cool accent the rewind, and the two have
+  // to stay tellable apart at a glance in every palette.
+  const THEMES = [
+    { name: { ja: 'ノワール', en: 'Noir' }, bg: '#111214', boot: '#44464c', rim: '#000',
+      dark: '#0d0d0e', light: '#3a3b3e', gold: [242, 201, 76], blue: [111, 211, 242], inv: '#e9e6dc' },
+    { name: { ja: 'サンセット', en: 'Sunset' }, bg: '#17101a', boot: '#4c3f52', rim: '#0b060d',
+      dark: '#150d19', light: '#42304a', gold: [255, 173, 92], blue: [167, 150, 255], inv: '#efe4e9' },
+    { name: { ja: 'フォレスト', en: 'Forest' }, bg: '#0d1511', boot: '#3f4f45', rim: '#050a07',
+      dark: '#0a120d', light: '#2d3d33', gold: [226, 209, 106], blue: [110, 224, 184], inv: '#e3e9de' },
+    { name: { ja: 'モノクロ', en: 'Mono' }, bg: '#121212', boot: '#4a4a4a', rim: '#000',
+      dark: '#0e0e0e', light: '#3c3c3c', gold: [234, 234, 234], blue: [138, 138, 138], inv: '#e8e8e8' }
+  ];
+  let themeIndex = 0;
+  let TH = THEMES[0];
+
+  function applyTheme() {
+    TH = THEMES[themeIndex];
+    const r = document.documentElement.style;
+    r.setProperty('--bg', TH.bg);
+    r.setProperty('--gold', rgb(TH.gold));
+    r.setProperty('--blue', rgb(TH.blue));
+    r.setProperty('--inv', TH.inv);
+    themeBtn.textContent = TH.name[lang];
+    EGG_RAMP = eggRamp();
+  }
 
   function renderMsg() {
     const s = STR[lang];
@@ -262,6 +314,9 @@
     titleEl.textContent = s.title;
     stageWordEl.textContent = s.stageWord;
     langBtn.textContent = s.langBtn;
+    resetBtn.textContent = s.reset;
+    speedWordEl.textContent = s.speedWord;
+    themeBtn.textContent = TH.name[lang];
     document.title = s.title;
     renderMsg();
   }
@@ -639,14 +694,14 @@
     // wash it in a cold, pale blue
     gctx.setTransform(1, 0, 0, 1, 0, 0);
     gctx.globalCompositeOperation = 'source-atop';
-    gctx.fillStyle = 'rgba(165,228,255,0.78)';
+    gctx.fillStyle = rgba(lift(TH.blue, 0.45), 0.78);
     gctx.fillRect(0, 0, ghostCv.width, ghostCv.height);
     gctx.globalCompositeOperation = 'source-over';
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 0.40 + 0.10 * Math.sin(now / 420);      // a slow, faint flicker
-    ctx.shadowColor = 'rgba(111,211,242,0.9)';
+    ctx.shadowColor = rgba(TH.blue, 0.9);
     ctx.shadowBlur = Math.max(4, cellSize * 0.35) * dpr;
     ctx.drawImage(ghostCv, 0, 0);
     ctx.restore();
@@ -670,6 +725,7 @@
   let blues = [];
   let lastFrame = 0;
   let hatchStart = 0;
+  let rewindSpeed = 1;      // how fast the rewind replays the run
   let rafId = 0;         // only one animation-frame chain may ever be pending
   function scheduleFrame() {
     if (rafId) cancelAnimationFrame(rafId);
@@ -683,7 +739,7 @@
   let seeds = [];        // where the inversion starts creeping from
 
   const pressed = { up: false, down: false, left: false, right: false };
-  const stick = { x: 0, y: 0, active: false, id: null };
+  const stick = { x: 0, y: 0, ox: 0, oy: 0, active: false, id: null };
 
   let boardPx = 1;
 
@@ -801,6 +857,8 @@
     bcEl.textContent = blues.filter(f => f.eaten).length + '/' + blues.length;
   }
 
+  function syncControls() { resetBtn.disabled = phase !== 'forward' && phase !== 'rewind'; }
+
   function startForward() {
     phase = 'forward';
     phaseEl.textContent = '▶ 前進';
@@ -808,15 +866,16 @@
     phaseEl.className = 'forward';
     erosion = 0; seeds = [];
     document.body.classList.remove('rewinding');
-    stickEl.classList.remove('locked');
     msgEl.style.display = 'none';
     lastFrame = 0;
     scheduleFrame();
+    syncControls();
   }
 
   function startHatch() {
     buildStage();
     phase = 'hatch';
+    syncControls();
     hatchStart = 0;
     msgEl.style.display = 'none';
     scheduleFrame();
@@ -828,7 +887,6 @@
     phaseEl.textContent = '◀◀ 逆行';
     hintEl.textContent = HINT.rewind;
     phaseEl.className = 'rewind';
-    stickEl.classList.add('locked');
     document.body.classList.add('rewinding');
     // the inversion starts at the gecko and creeps outward, with a few side blooms
     const makeSeed = (x, y, delay, reach) => {
@@ -853,10 +911,12 @@
     }
     erosion = 0;
     releaseStick();
+    syncControls();
   }
 
   function finish() {
     phase = 'done';
+    syncControls();
     hintEl.textContent = HINT.done;
     const okW = whites.every(f => f.eaten);
     const okB = blues.every(f => f.eaten);
@@ -879,7 +939,6 @@
   // angle, and every other band from the sixth on plays the board unlit.
   const FINAL_STAGE = 30;
   let ghostAngle = Math.PI;
-  let ghostSquare = true;   // does that angle still map the square board onto itself?
   let lit = false;
 
   function setStageRules() {
@@ -888,7 +947,6 @@
       : band === 2 ? Math.PI / 2
       : band === 3 ? Math.PI / 4
       : Math.random() * Math.PI * 2;
-    ghostSquare = Math.abs(Math.sin(2 * ghostAngle)) < 1e-6;
     lit = band >= 1 && band % 2 === 1;
   }
 
@@ -898,19 +956,19 @@
     return { x: PLAY_C + dx * c - dy * sn, y: PLAY_C + dx * sn + dy * c };
   }
 
-  // A quarter turn leaves the square board covering itself, so flies may sit
-  // anywhere. At any other angle they have to keep to the disc that does, or a
-  // blue fly's mirrored target would fall off the board and be uncatchable.
-  const PLAY_LO = 0.8, PLAY_HI = GRID - 1.8;
-  const PLAY_C = (GRID - 1) / 2, PLAY_R = GRID / 2 - 1;
-  function inPlay(x, y) {
-    if (x < PLAY_LO || y < PLAY_LO || x > PLAY_HI || y > PLAY_HI) return false;
-    return ghostSquare || Math.hypot(x - PLAY_C, y - PLAY_C) <= PLAY_R;
+  // The arena is a disc, and a disc turns onto itself at every angle. That is
+  // what keeps a blue fly's mirrored target on the board however the ghost is
+  // turned — nothing can ever be placed somewhere the gecko cannot reach.
+  const ARENA_R = GRID / 2;                 // cells: the disc fills the square canvas
+  const PLAY_C = (GRID - 1) / 2;
+  const GECKO_R = ARENA_R - 0.6;            // how far from the middle the gecko may stand
+  const PLAY_R = ARENA_R - 1.4;             // and how far out a fly may sit
+  function arenaPath(g) {
+    g.beginPath();
+    g.arc(boardPx / 2, boardPx / 2, ARENA_R * cellSize, 0, Math.PI * 2);
   }
+  function inPlay(x, y) { return Math.hypot(x - PLAY_C, y - PLAY_C) <= PLAY_R; }
   function clampPlay(p) {
-    p.x = Math.min(PLAY_HI, Math.max(PLAY_LO, p.x));
-    p.y = Math.min(PLAY_HI, Math.max(PLAY_LO, p.y));
-    if (ghostSquare) return p;
     const dx = p.x - PLAY_C, dy = p.y - PLAY_C, d = Math.hypot(dx, dy);
     if (d > PLAY_R) { p.x = PLAY_C + dx / d * PLAY_R; p.y = PLAY_C + dy / d * PLAY_R; }
     return p;
@@ -962,10 +1020,13 @@
 
     if (gecko.moving) {
       let ux = dx / mag, uy = dy / mag;
-      // pressed against a wall: turn to walk along it rather than shove sideways
-      const pad = 0.15, near = 0.06;
-      if ((gecko.x <= -pad + near && ux < 0) || (gecko.x >= GRID - 1 + pad - near && ux > 0)) ux = 0;
-      if ((gecko.y <= -pad + near && uy < 0) || (gecko.y >= GRID - 1 + pad - near && uy > 0)) uy = 0;
+      // pressed against the rim: drop the part of the push that aims out of the
+      // arena, so the gecko slides around it rather than shoving into it
+      const rx = gecko.x - PLAY_C, ry = gecko.y - PLAY_C, rd = Math.hypot(rx, ry);
+      if (rd > GECKO_R - 0.06) {
+        const out = (ux * rx + uy * ry) / rd;
+        if (out > 0) { ux -= (rx / rd) * out; uy -= (ry / rd) * out; }
+      }
       const l = Math.hypot(ux, uy);
       if (l < 0.25) { mag = 0; gecko.moving = false; }       // pushing straight into the wall
       else { ux /= l; uy /= l; mag *= Math.min(1, l * 1.2); gecko.targetAngle = Math.atan2(ux, -uy); }
@@ -981,9 +1042,8 @@
       const pace = SPEED * mag * Math.max(0.2, align);
       gecko.x += Math.sin(gecko.angle) * pace * dt;
       gecko.y -= Math.cos(gecko.angle) * pace * dt;
-      const pad = 0.15;
-      gecko.x = Math.min(GRID - 1 + pad, Math.max(-pad, gecko.x));
-      gecko.y = Math.min(GRID - 1 + pad, Math.max(-pad, gecko.y));
+      const rx = gecko.x - PLAY_C, ry = gecko.y - PLAY_C, rd = Math.hypot(rx, ry);
+      if (rd > GECKO_R) { gecko.x = PLAY_C + rx / rd * GECKO_R; gecko.y = PLAY_C + ry / rd * GECKO_R; }
     }
     // one gait cycle per CYCLE_LEN of travel, so planted feet stay put on the board,
     // but never faster than a real gecko can step (spins no longer make the legs flicker)
@@ -1020,7 +1080,7 @@
   }
 
   function updateRewind(dt) {
-    clock -= dt;
+    clock -= dt * rewindSpeed;
     const s = sampleTrack(Math.max(0, clock));
     if (s) {
       const prev = { x: gecko.x, y: gecko.y };
@@ -1154,10 +1214,11 @@
   for (let s = 0; s <= POKE_TARGET; s++) EGG_GRIDS.push(buildEggGrid(s));
 
   // ---- the pale lines are lit through a stepped gradient that drifts and returns ----
-  const EGG_RAMP = [
-    [248, 241, 226], [250, 226, 160], [242, 201, 76],
-    [216, 154, 58], [242, 201, 76], [250, 226, 160]
-  ];
+  let EGG_RAMP = [];
+  function eggRamp() {
+    const g = TH.gold;
+    return [lift(g, 0.9), lift(g, 0.5), g, dim(g, 0.72), g, lift(g, 0.5)];
+  }
   const RAMP_STEPS = 8;                // how many flat colours the ramp collapses to
   const eggCv = document.createElement('canvas');
   eggCv.width = EGG_W; eggCv.height = EGG_H;
@@ -1206,7 +1267,7 @@
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     if (glow > 0) {
-      ctx.shadowColor = 'rgba(242,201,76,0.85)';
+      ctx.shadowColor = rgba(TH.gold, 0.85);
       ctx.shadowBlur = cellSize * (0.04 + 0.16 * glow);
     }
     ctx.drawImage(eggCv, Math.round((cx - w / 2) * dpr) / dpr, Math.round((cy - h / 2) * dpr) / dpr, w, h);
@@ -1319,7 +1380,7 @@
     if (p < 0.2) {
       ctx.save();
       ctx.globalAlpha = (1 - p / 0.2) * 0.55;
-      ctx.fillStyle = '#f2c94c';
+      ctx.fillStyle = rgb(TH.gold);
       ctx.beginPath();
       ctx.arc(cx, cy, cellSize * 2.9, 0, Math.PI * 2);
       ctx.fill();
@@ -1338,12 +1399,26 @@
 
   // ================= drawing =================
   function drawBoard() {
-    for (let gx = 0; gx < GRID; gx++) {
-      for (let gy = 0; gy < GRID; gy++) {
-        ctx.fillStyle = (gx + gy) % 2 === 0 ? '#0d0d0e' : '#3a3b3e';
-        ctx.fillRect(gx * cellSize, gy * cellSize, cellSize, cellSize);
+    ctx.clearRect(0, 0, boardPx, boardPx);
+    ctx.save();
+    arenaPath(ctx);
+    ctx.clip();
+    if (phase === 'idle') {
+      ctx.fillStyle = TH.boot;
+      ctx.fillRect(0, 0, boardPx, boardPx);
+    } else {
+      for (let gx = 0; gx < GRID; gx++) {
+        for (let gy = 0; gy < GRID; gy++) {
+          ctx.fillStyle = (gx + gy) % 2 === 0 ? TH.dark : TH.light;
+          ctx.fillRect(gx * cellSize, gy * cellSize, cellSize, cellSize);
+        }
       }
     }
+    ctx.restore();
+    arenaPath(ctx);
+    ctx.lineWidth = Math.max(2, cellSize * 0.07);
+    ctx.strokeStyle = TH.rim;
+    ctx.stroke();
   }
 
   function drawTrack() {
@@ -1369,17 +1444,39 @@
       seg(clock, Infinity, 'rgba(120,120,130,0.20)', w * 0.7, true);
       seg(-Infinity, clock, 'rgba(20,20,24,0.95)', w, true);
     } else {
-      seg(-Infinity, Infinity, 'rgba(242,201,76,0.22)', w * 0.8, false);
+      seg(-Infinity, Infinity, rgba(TH.gold, 0.22), w * 0.8, false);
       // preview of where the rewind will actually run
       ctx.setLineDash([cellSize * 0.18, cellSize * 0.22]);
-      seg(-Infinity, Infinity, 'rgba(111,211,242,0.55)', w * 0.85, true);
+      seg(-Infinity, Infinity, rgba(TH.blue, 0.55), w * 0.85, true);
       ctx.setLineDash([]);
     }
   }
 
   // a fly sitting on the board: tiny restless shuffles and a buzz of the wings
+  // The blue fly's art is painted one particular cyan, so it is washed with the
+  // palette's cool accent instead — a flat fill would lose its linework.
+  const blueFlyCv = document.createElement('canvas');
+  const bfctx = blueFlyCv.getContext('2d');
+  let blueFlyTheme = -1;
+  function blueFlySprite() {
+    const img = FLY_BLUE_IMG;
+    if (!img.complete || !img.naturalWidth) return img;
+    if (blueFlyTheme === themeIndex) return blueFlyCv;
+    blueFlyCv.width = img.naturalWidth; blueFlyCv.height = img.naturalHeight;
+    bfctx.globalCompositeOperation = 'source-over';
+    bfctx.clearRect(0, 0, blueFlyCv.width, blueFlyCv.height);
+    bfctx.drawImage(img, 0, 0);
+    bfctx.globalCompositeOperation = 'source-atop';
+    bfctx.fillStyle = rgba(lift(TH.blue, 0.2), 0.85);
+    bfctx.fillRect(0, 0, blueFlyCv.width, blueFlyCv.height);
+    bfctx.globalCompositeOperation = 'source-over';
+    blueFlyTheme = themeIndex;
+    return blueFlyCv;
+  }
+
   function drawFlySprite(img, f, now, size) {
-    if (!img.complete || !img.naturalWidth) return;
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
     const t = now / 1000;
     const st = flyAt(f, clock);
     const gx = (st.x + 0.5) * cellSize, gy = (st.y + 0.5) * cellSize;
@@ -1394,7 +1491,7 @@
     const rot = st.rot + Math.sin(t * 1.3 + f.seed) * 0.12 * (1 - st.lift);
     const buzz = (1 + Math.sin(t * (38 + 40 * st.lift) + f.seed) * 0.035) ;
     size *= 1 + st.lift * 0.3;
-    const h = size, w = size * img.naturalWidth / img.naturalHeight;
+    const h = size, w = size * iw / ih;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rot);
@@ -1417,15 +1514,15 @@
       if (near) {
         // its moment is now: a pulsing halo
         const pulse = 1 + Math.sin(now / 90) * 0.12;
-        ctx.strokeStyle = 'rgba(159,232,255,0.9)';
+        ctx.strokeStyle = rgba(lift(TH.blue, 0.4), 0.9);
         ctx.lineWidth = Math.max(1.2, cellSize * 0.06);
         ctx.beginPath();
         ctx.arc(cx, cy, cellSize * 0.58 * pulse, 0, Math.PI * 2);
         ctx.stroke();
       }
-      drawFlySprite(FLY_BLUE_IMG, f, now, cellSize * 0.95);
+      drawFlySprite(blueFlySprite(), f, now, cellSize * 0.95);
 
-      ctx.fillStyle = near ? '#e8faff' : 'rgba(180,230,245,0.85)';
+      ctx.fillStyle = near ? rgb(lift(TH.blue, 0.85)) : rgba(lift(TH.blue, 0.5), 0.85);
       ctx.font = Math.round(cellSize * 0.36) + 'px ' + GAME_FONT;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(f.t.toFixed(1), cx, cy - cellSize * 0.66);
@@ -1435,13 +1532,13 @@
 
   function drawClock() {
     const rewinding = phase === 'rewind';
-    const tint = rewinding ? '111,211,242' : '242,201,76';
+    const tint = rewinding ? TH.blue : TH.gold;
     const label = clock.toFixed(1) + 's';
     const right = GRID * cellSize - cellSize * 0.25;
     const bottom = GRID * cellSize - cellSize * 0.1;
     ctx.font = Math.round(cellSize * 1.4) + 'px ' + GAME_FONT;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillStyle = 'rgba(' + tint + ',' + (rewinding ? 0.6 : 0.5) + ')';
+    ctx.fillStyle = rgba(tint, rewinding ? 0.6 : 0.5);
     ctx.fillText(label, right, bottom);
 
     // how much of the phase is still to come, running along beside the number
@@ -1449,14 +1546,14 @@
     const x = right - ctx.measureText(label).width - cellSize * 0.5 - w;
     const y = bottom - cellSize * 0.5 - h / 2;
     const remain = Math.max(0, Math.min(1, (rewinding ? clock : duration - clock) / duration));
-    ctx.fillStyle = 'rgba(' + tint + ',0.16)';
+    ctx.fillStyle = rgba(tint, 0.22);
     ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = 'rgba(' + tint + ',0.62)';
+    ctx.fillStyle = rgba(tint, 0.75);
     ctx.fillRect(x, y, w * remain, h);
   }
 
   function stepEffects(dt) {
-    if (phase === 'rewind') erosion = Math.min(1, erosion + dt / 4.8);
+    if (phase === 'rewind') erosion = Math.min(1, erosion + dt * rewindSpeed / 4.8);
     stepLights(dt);
   }
 
@@ -1518,19 +1615,23 @@
   let lights = [];
 
   function buildLights() {
-    lights = !lit ? [] : Array.from({ length: 3 }, () => ({
-      x: Math.random() * GRID, y: Math.random() * GRID,
-      tx: Math.random() * GRID, ty: Math.random() * GRID,
-      r: 1.9 + Math.random() * 1.1,
-      speed: 0.9 + Math.random() * 0.9
-    }));
+    lights = !lit ? [] : Array.from({ length: 3 }, () => {
+      const at = nextSpot(), to = nextSpot();
+      return { x: at.x, y: at.y, tx: to.x, ty: to.y,
+               r: 1.9 + Math.random() * 1.1, speed: 0.9 + Math.random() * 0.9 };
+    });
+  }
+
+  function nextSpot() {
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * GECKO_R;
+    return { x: PLAY_C + Math.cos(a) * d, y: PLAY_C + Math.sin(a) * d };
   }
 
   function stepLights(dt) {
     lights.forEach(L => {
       const dx = L.tx - L.x, dy = L.ty - L.y;
       const d = Math.hypot(dx, dy);
-      if (d < 0.3) { L.tx = Math.random() * GRID; L.ty = Math.random() * GRID; return; }
+      if (d < 0.3) { const to = nextSpot(); L.tx = to.x; L.ty = to.y; return; }
       L.x += (dx / d) * L.speed * dt;
       L.y += (dy / d) * L.speed * dt;
     });
@@ -1558,6 +1659,8 @@
     lights.forEach(L => hole(L.x * cellSize, L.y * cellSize, L.r * cellSize));
     if (pose) hole((pose.x + 0.5) * cellSize, (pose.y + 0.5) * cellSize, cellSize * 1.2);
     ctx.save();
+    arenaPath(ctx);
+    ctx.clip();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(darkCv, 0, 0);
     ctx.restore();
@@ -1565,6 +1668,8 @@
 
   function invertRegion(path) {
     ctx.save();
+    arenaPath(ctx);
+    ctx.clip();
     ctx.globalCompositeOperation = 'difference';
     ctx.fillStyle = '#fff';
     if (path) ctx.fill(path);
@@ -1589,8 +1694,8 @@
     drawGhost(pose, now);
     if (pose) renderGecko(pose);
     applyDarkness(pose);
-    drawClock();
     applyInversion(now);
+    drawClock();
   }
 
   function loop(t) {
@@ -1619,16 +1724,17 @@
   }
 
   // ================= input =================
-  const STICK_R = 52, DEADZONE = 0.14;
+  // Wherever a finger lands becomes the centre of the pad, so the whole screen
+  // steers the same way and nothing has to be aimed for.
+  const STICK_R = 54, DEADZONE = 0.16;
   function setStick(clientX, clientY) {
-    if (phase !== 'forward') return;
-    const r = stickEl.getBoundingClientRect();
-    let dx = clientX - (r.left + r.width / 2);
-    let dy = clientY - (r.top + r.height / 2);
+    let dx = clientX - stick.ox, dy = clientY - stick.oy;
     const len = Math.hypot(dx, dy);
     const clamped = Math.min(len, STICK_R);
     const nx = len ? dx / len : 0, ny = len ? dy / len : 0;
-    knobEl.style.transform = 'translate(' + nx * clamped + 'px,' + ny * clamped + 'px)';
+    padEl.style.left = stick.ox + 'px';
+    padEl.style.top = stick.oy + 'px';
+    padKnob.style.transform = 'translate(' + nx * clamped + 'px,' + ny * clamped + 'px)';
     let mag = clamped / STICK_R;
     if (mag < DEADZONE) { stick.x = 0; stick.y = 0; return; }
     mag = (mag - DEADZONE) / (1 - DEADZONE);
@@ -1636,29 +1742,22 @@
   }
   function releaseStick() {
     stick.active = false; stick.id = null; stick.x = 0; stick.y = 0;
-    knobEl.style.transform = 'translate(0px,0px)';
-    stickEl.classList.remove('active');
+    padEl.classList.remove('on');
   }
-  stickEl.addEventListener('touchstart', e => {
-    e.preventDefault();
-    const t = e.changedTouches[0];
-    stick.active = true; stick.id = t.identifier;
-    stickEl.classList.add('active'); setStick(t.clientX, t.clientY);
-  }, { passive: false });
-  stickEl.addEventListener('touchmove', e => {
-    e.preventDefault();
-    for (const t of e.changedTouches) if (t.identifier === stick.id) setStick(t.clientX, t.clientY);
-  }, { passive: false });
-  ['touchend', 'touchcancel'].forEach(ev => stickEl.addEventListener(ev, e => {
-    e.preventDefault();
-    for (const t of e.changedTouches) if (t.identifier === stick.id) releaseStick();
-  }, { passive: false }));
-  stickEl.addEventListener('mousedown', e => {
-    e.preventDefault(); stick.active = true;
-    stickEl.classList.add('active'); setStick(e.clientX, e.clientY);
+  const padKnob = document.getElementById('padKnob');
+  document.addEventListener('pointerdown', e => {
+    if (phase !== 'forward' || stick.active || e.target.closest('button')) return;
+    stick.active = true; stick.id = e.pointerId;
+    stick.ox = e.clientX; stick.oy = e.clientY;
+    padEl.classList.add('on');
+    setStick(e.clientX, e.clientY);
   });
-  window.addEventListener('mousemove', e => { if (stick.active) setStick(e.clientX, e.clientY); });
-  window.addEventListener('mouseup', () => { if (stick.active) releaseStick(); });
+  document.addEventListener('pointermove', e => {
+    if (stick.active && e.pointerId === stick.id) setStick(e.clientX, e.clientY);
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, e => {
+    if (stick.active && e.pointerId === stick.id) releaseStick();
+  }));
 
   const keyMap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
                    w: 'up', s: 'down', a: 'left', d: 'right' };
@@ -1675,6 +1774,24 @@
     startForward();
   });
 
+  // start this stage over from the top, whichever way the clock was running
+  resetBtn.addEventListener('click', () => {
+    if (phase !== 'forward' && phase !== 'rewind') return;
+    releaseStick();
+    buildStage();
+    startForward();
+  });
+
+  speedBtns.forEach(b => b.addEventListener('click', () => {
+    rewindSpeed = parseFloat(b.dataset.sp);
+    speedBtns.forEach(o => o.classList.toggle('on', o === b));
+  }));
+
+  themeBtn.addEventListener('click', () => {
+    themeIndex = (themeIndex + 1) % THEMES.length;
+    applyTheme();
+  });
+
   // the shell gives a little more each time it is struck, then breaks open
   canvas.addEventListener('pointerdown', e => {
     if (phase !== 'idle') return;
@@ -1688,6 +1805,7 @@
 
   // ================= boot =================
   resize();
+  applyTheme();
   buildStage();
   phase = 'idle';
   msgState = { kind: 'boot' };
