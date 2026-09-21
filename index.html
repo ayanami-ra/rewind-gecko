@@ -36,7 +36,16 @@
     width: 100%; max-width: 460px; margin-bottom: 4px;
   }
   #title { font-size: 20px; letter-spacing: 0.08em; }
+  #topRight { display: flex; align-items: baseline; gap: 10px; }
   #stageLabel { font-size: 15px; }
+  #langBtn {
+    background: transparent; color: var(--cream); border: 1px solid #4a4b50;
+    border-radius: 5px; padding: 2px 8px; font-size: 12px; letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #langBtn:hover { border-color: var(--gold); color: var(--gold); }
+  body.rewinding #langBtn { color: #1a1b1e; border-color: #a5a299; }
+  body.rewinding #langBtn:hover { border-color: #1a1b1e; }
   #hud {
     display: flex; justify-content: space-between; align-items: center;
     width: 100%; max-width: 460px; font-size: 14px; margin-bottom: 6px;
@@ -110,7 +119,10 @@
 <div id="app">
   <div id="top">
     <div id="title">回帰性家守</div>
-    <div id="stageLabel">ステージ <span id="stage">1</span></div>
+    <div id="topRight">
+      <div id="stageLabel"><span id="stageWord">ステージ</span> <span id="stage">1</span></div>
+      <button id="langBtn" type="button">EN</button>
+    </div>
   </div>
   <div id="hud">
     <div id="phase" class="forward">▶ 前進</div>
@@ -154,6 +166,87 @@
     done: ''
   };
   const knobEl = document.getElementById('knob');
+  const titleEl = document.getElementById('title');
+  const stageWordEl = document.getElementById('stageWord');
+  const langBtn = document.getElementById('langBtn');
+
+  const STR = {
+    ja: {
+      title: '回帰性家守',
+      stageWord: 'ステージ',
+      start: 'スタート',
+      stageClearTitle: n => 'ステージ ' + n + ' クリア！',
+      clearText: 'ハエも逆行ハエも、ぜんぶ食べきった！',
+      hintStage3: 'ここからハエが跳びはじめる！',
+      hintStageMore: 'ハエの跳ぶ間隔が、さらに短くなる',
+      next: '次のステージへ',
+      failTitle: '失敗…',
+      failText: (whiteLeft, blueLeft) => {
+        const miss = [];
+        if (whiteLeft > 0) miss.push('ハエ ' + whiteLeft + '匹');
+        if (blueLeft > 0) miss.push('逆行ハエ ' + blueLeft + '匹');
+        return '食べ残し：' + miss.join('、');
+      },
+      retry: 'リトライ',
+      langBtn: 'EN'
+    },
+    en: {
+      title: 'Rewind Gecko',
+      stageWord: 'Stage',
+      start: 'Start',
+      stageClearTitle: n => 'Stage ' + n + ' Clear!',
+      clearText: 'Every fly is eaten, forward and blue alike!',
+      hintStage3: 'Flies start hopping from here!',
+      hintStageMore: 'Flies now hop at shorter intervals',
+      next: 'Next Stage',
+      failTitle: 'Failed...',
+      failText: (whiteLeft, blueLeft) => {
+        const miss = [];
+        if (whiteLeft > 0) miss.push(whiteLeft + (whiteLeft === 1 ? ' fly' : ' flies'));
+        if (blueLeft > 0) miss.push(blueLeft + (blueLeft === 1 ? ' blue fly' : ' blue flies'));
+        return 'Uneaten: ' + miss.join(', ');
+      },
+      retry: 'Retry',
+      langBtn: '日本語'
+    }
+  };
+  let lang = 'ja';
+  let msgState = { kind: 'boot' };
+
+  function renderMsg() {
+    const s = STR[lang];
+    if (msgState.kind === 'boot') {
+      msgTitle.textContent = s.title;
+      msgText.textContent = '';
+      msgBtn.textContent = s.start;
+    } else if (msgState.kind === 'clear') {
+      const cleared = msgState.clearedStage;
+      msgTitle.textContent = s.stageClearTitle(cleared);
+      let t = s.clearText;
+      if (cleared === 2) t += '\n' + s.hintStage3;
+      else if (cleared >= 3) t += '\n' + s.hintStageMore;
+      msgText.textContent = t;
+      msgBtn.textContent = s.next;
+    } else {
+      msgTitle.textContent = s.failTitle;
+      msgText.textContent = s.failText(msgState.whiteLeft, msgState.blueLeft);
+      msgBtn.textContent = s.retry;
+    }
+  }
+
+  function applyLang() {
+    const s = STR[lang];
+    titleEl.textContent = s.title;
+    stageWordEl.textContent = s.stageWord;
+    langBtn.textContent = s.langBtn;
+    document.title = s.title;
+    renderMsg();
+  }
+
+  langBtn.addEventListener('click', () => {
+    lang = lang === 'ja' ? 'en' : 'ja';
+    applyLang();
+  });
 
   const GRID = 12;
   const FLY_IMG = new Image();
@@ -727,20 +820,16 @@
     const okW = whites.every(f => f.eaten);
     const okB = blues.every(f => f.eaten);
     if (okW && okB) {
-      msgTitle.textContent = 'ステージ ' + stage + ' クリア！';
-      msgText.textContent = 'ハエも逆行ハエも、ぜんぶ食べきった！';
-      msgBtn.textContent = '次のステージへ';
+      msgState = { kind: 'clear', clearedStage: stage };
       stage++;
-      if (stage === 3) msgText.textContent += '\nここからハエが跳びはじめる！';
-      else if (stage > 3) msgText.textContent += '\nハエの跳ぶ間隔が、さらに短くなる';
     } else {
-      const miss = [];
-      if (!okW) miss.push('ハエ ' + whites.filter(f => !f.eaten).length + '匹');
-      if (!okB) miss.push('逆行ハエ ' + blues.filter(f => !f.eaten).length + '匹');
-      msgTitle.textContent = '失敗…';
-      msgText.textContent = '食べ残し：' + miss.join('、');
-      msgBtn.textContent = 'リトライ';
+      msgState = {
+        kind: 'fail',
+        whiteLeft: whites.filter(f => !f.eaten).length,
+        blueLeft: blues.filter(f => !f.eaten).length
+      };
     }
+    renderMsg();
     msgEl.style.display = 'flex';
   }
 
@@ -971,15 +1060,6 @@
       ctx.fillText(f.t.toFixed(1), cx, cy - cellSize * 0.66);
     });
 
-    // mark the mouth so it is obvious what actually does the catching
-    if (gecko) {
-      const m = mouthPos(gecko);
-      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc((m.x + 0.5) * cellSize, (m.y + 0.5) * cellSize, EAT_R * cellSize, 0, Math.PI * 2);
-      ctx.stroke();
-    }
   }
 
   function drawClock(now) {
@@ -1149,8 +1229,8 @@
   resize();
   buildStage();
   phase = 'idle';
-  msgTitle.textContent = '回帰性家守';
-  msgBtn.textContent = 'スタート';
+  msgState = { kind: 'boot' };
+  applyLang();
   hintEl.textContent = HINT.idle;
   msgEl.style.display = 'flex';
   draw(0);
