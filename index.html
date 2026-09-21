@@ -997,35 +997,25 @@
     };
   }
 
-  const EGG_RX = 1.05, EGG_RY = 1.55;   // half-size of the egg, in cells
+  const EGG_RX = 1.05, EGG_RY = 1.52;   // half-size of the egg, in cells
   function eggOutline(n) {
     const pts = [];
     for (let i = 0; i <= n; i++) {
       const a = (i / n) * Math.PI * 2;
       const rx = Math.sin(a), ry = -Math.cos(a);
-      const taper = ry < 0 ? 1 + 0.34 * ry : 1;   // narrower top, round bottom
+      const taper = ry < 0 ? 1 + 0.30 * ry : 1;   // narrower top, round bottom
       pts.push({ x: EGG_RX * rx * taper, y: EGG_RY * ry });
     }
     return pts;
   }
-  const EGG_PATH = eggOutline(40);
+  const EGG_PATH = eggOutline(64);
+  function eggBodyPath(g) {
+    g.beginPath();
+    g.moveTo(EGG_PATH[0].x, EGG_PATH[0].y);
+    for (let i = 1; i < EGG_PATH.length; i++) g.lineTo(EGG_PATH[i].x, EGG_PATH[i].y);
+    g.closePath();
+  }
 
-  const eggRand = makeRand(20260921);
-  // speckles and ridge streaks, echoing the gecko's own dappled markings
-  const EGG_SPECKLES = Array.from({ length: 22 }, () => {
-    const a = eggRand() * Math.PI * 2, r = Math.sqrt(eggRand());
-    return {
-      x: EGG_RX * 0.82 * r * Math.sin(a),
-      y: EGG_RY * 0.88 * r * -Math.cos(a),
-      s: 0.045 + eggRand() * 0.075,
-      rot: eggRand() * Math.PI
-    };
-  });
-  const EGG_STREAKS = [
-    { x: -0.18, y0: -1.10, y1: -0.35, w: 0.05 },
-    { x: 0.24, y0: -0.15, y1: 0.75, w: 0.045 },
-    { x: -0.42, y0: -0.05, y1: 0.55, w: 0.035 }
-  ];
   function jaggedPath(x0, y0, x1, y1, n, jitter, seed) {
     const r = makeRand(seed);
     const nx = -(y1 - y0), ny = (x1 - x0);
@@ -1039,87 +1029,177 @@
     pts.push({ x: x1, y: y1 });
     return pts;
   }
-  const EGG_CRACKS = [
-    jaggedPath(-0.10, -1.45, 0.30, -0.25, 6, 0.16, 7),
-    jaggedPath(0.05, -1.30, -0.35, 0.05, 5, 0.14, 13),
-    jaggedPath(0.30, -0.60, 0.55, -1.10, 4, 0.10, 29)
+
+  // banded stripes, diamonds and dots, echoing the gecko's own markings
+  const EGG_BANDS = [
+    { y: -0.88, sag: 0.17 },
+    { y: -0.24, sag: 0.17 },
+    { y: 0.04, sag: 0.16 },
+    { y: 0.20, sag: 0.16 }
+  ];
+  const EGG_DIAMONDS = [
+    { x: -0.44, y: -1.02, s: 0.24 },
+    { x: 0.14, y: -1.12, s: 0.22 },
+    { x: -0.60, y: -0.54, s: 0.26 },
+    { x: 0.52, y: -0.60, s: 0.22 },
+    { x: -0.62, y: 0.52, s: 0.24 },
+    { x: -0.12, y: 0.46, s: 0.30 },
+    { x: 0.56, y: 0.40, s: 0.26 },
+    { x: -0.28, y: 1.00, s: 0.26 },
+    { x: 0.46, y: 0.94, s: 0.22 }
+  ];
+  const EGG_DOTS = [
+    { x: -0.14, y: -0.56, r: 0.12 },
+    { x: 0.24, y: -0.64, r: 0.12 },
+    { x: 0.32, y: 0.50, r: 0.14 },
+    { x: 0.08, y: 1.04, r: 0.13 }
+  ];
+  // the shell is already giving way: one long split, with branches out to the rim
+  const EGG_SPLIT = jaggedPath(0.34, -1.40, 0.06, 1.30, 11, 0.34, 7);
+  function splitAt(f) {
+    const i = Math.max(0, Math.min(EGG_SPLIT.length - 1, Math.round(f * (EGG_SPLIT.length - 1))));
+    return EGG_SPLIT[i];
+  }
+  const EGG_BRANCHES = [
+    (p => jaggedPath(p.x, p.y, 1.25, p.y - 0.22, 4, 0.16, 13))(splitAt(0.30)),
+    (p => jaggedPath(p.x, p.y, 1.25, p.y + 0.12, 4, 0.16, 29))(splitAt(0.62)),
+    (p => jaggedPath(p.x, p.y, 1.10, p.y + 0.20, 3, 0.14, 41))(splitAt(0.85))
   ];
 
-  function strokePath(pts) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
+  function strokePath(g, pts) {
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.stroke();
   }
 
-  // draws the whole egg in local unit space (1 unit = 1 cell), centred on the origin
-  function drawEggShape(alpha, glow) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
+  // every pale line of the shell, drawn flat white so it can be tinted as one mask
+  function drawEggLines(g) {
+    g.save();
+    eggBodyPath(g);
+    g.clip();
+    g.fillStyle = '#fff';
+    g.strokeStyle = '#fff';
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
 
-    const outline = () => {
-      ctx.beginPath();
-      ctx.moveTo(EGG_PATH[0].x, EGG_PATH[0].y);
-      for (let i = 1; i < EGG_PATH.length; i++) ctx.lineTo(EGG_PATH[i].x, EGG_PATH[i].y);
-      ctx.closePath();
-    };
-
-    outline();
-    const grad = ctx.createRadialGradient(-EGG_RX * 0.3, -EGG_RY * 0.35, 0.1, 0, 0, EGG_RY * 1.15);
-    grad.addColorStop(0, '#f7f1e2');
-    grad.addColorStop(1, '#cfc4a4');
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.save();
-    outline();
-    ctx.clip();
-    ctx.fillStyle = 'rgba(42,38,30,0.55)';
-    EGG_SPECKLES.forEach(sp => {
-      ctx.save();
-      ctx.translate(sp.x, sp.y);
-      ctx.rotate(sp.rot);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, sp.s, sp.s * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+    g.lineWidth = 0.075;
+    EGG_BANDS.forEach(b => {
+      g.beginPath();
+      g.moveTo(-1.4, b.y + b.sag);
+      g.quadraticCurveTo(0, b.y - b.sag, 1.4, b.y + b.sag);
+      g.stroke();
     });
-    ctx.strokeStyle = 'rgba(42,38,30,0.4)';
-    ctx.lineCap = 'round';
-    EGG_STREAKS.forEach(st => {
-      ctx.lineWidth = st.w;
-      ctx.beginPath();
-      ctx.moveTo(st.x, st.y0);
-      ctx.quadraticCurveTo(st.x + 0.1, (st.y0 + st.y1) / 2, st.x, st.y1);
-      ctx.stroke();
+
+    EGG_DIAMONDS.forEach(d => {
+      g.save();
+      g.translate(d.x, d.y);
+      g.rotate(Math.PI / 4);
+      g.fillRect(-d.s / 2, -d.s / 2, d.s, d.s);
+      g.restore();
     });
-    ctx.restore();
 
-    outline();
-    ctx.lineWidth = 0.045;
-    ctx.strokeStyle = 'rgba(20,18,14,0.85)';
-    ctx.stroke();
+    EGG_DOTS.forEach(o => {
+      g.beginPath();
+      g.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      g.fill();
+    });
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(20,16,12,0.9)';
-    ctx.lineWidth = 0.032;
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    if (glow > 0) {
-      ctx.shadowColor = 'rgba(242,201,76,0.95)';
-      ctx.shadowBlur = 0.10 + 0.16 * glow;
+    // the fracture first clears a channel through the markings, then draws into it,
+    // so the shell reads as separate plates however the pattern happens to fall
+    const crack = () => { strokePath(g, EGG_SPLIT); EGG_BRANCHES.forEach(b => strokePath(g, b)); };
+    g.globalCompositeOperation = 'destination-out';
+    g.lineWidth = 0.20;
+    crack();
+    g.globalCompositeOperation = 'source-over';
+    g.lineWidth = 0.10;
+    crack();
+    g.restore();
+
+    eggBodyPath(g);
+    g.lineWidth = 0.14;
+    g.lineJoin = 'round';
+    g.strokeStyle = '#fff';
+    g.stroke();
+  }
+
+  // ---- the shell's lines are painted through a stepped, low-resolution gradient ----
+  const EGG_BOX = 3.4;                 // unit-space square the whole egg fits inside
+  const EGG_SCALE = 1.5;               // the title egg sits larger than one board cell
+  const EGG_RAMP = [
+    [248, 241, 226], [250, 226, 160], [242, 201, 76],
+    [216, 154, 58], [242, 201, 76], [250, 226, 160]
+  ];
+  const RAMP_STEPS = 8;                // how many flat colours the ramp collapses to
+  const PX_COLS = 11, PX_ROWS = 16;    // how coarse the pixels across the egg are
+  const eggCv = document.createElement('canvas');
+  const ectx = eggCv.getContext('2d');
+  const pxCv = document.createElement('canvas');
+  const pctx = pxCv.getContext('2d');
+
+  function rampColor(v) {
+    v -= Math.floor(v);
+    v = Math.floor(v * RAMP_STEPS) / RAMP_STEPS;
+    const f = v * EGG_RAMP.length;
+    const i = Math.floor(f) % EGG_RAMP.length;
+    const a = EGG_RAMP[i], b = EGG_RAMP[(i + 1) % EGG_RAMP.length];
+    const k = f - Math.floor(f);
+    const mix = j => Math.round(a[j] + (b[j] - a[j]) * k);
+    return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+  }
+
+  function buildPixelRamp(shift) {
+    if (pxCv.width !== PX_COLS) { pxCv.width = PX_COLS; pxCv.height = PX_ROWS; }
+    for (let y = 0; y < PX_ROWS; y++) {
+      for (let x = 0; x < PX_COLS; x++) {
+        const u = (x / (PX_COLS - 1)) * 0.5 + (y / (PX_ROWS - 1)) * 0.75;
+        pctx.fillStyle = rampColor(u - shift);
+        pctx.fillRect(x, y, 1, 1);
+      }
     }
-    EGG_CRACKS.forEach(strokePath);
-    ctx.restore();
+  }
 
+  // redraws the tinted line art offscreen; call once per frame before painting the egg
+  function buildEggArt(shift) {
+    const dpr = canvas.width / Math.max(1, boardPx);
+    const px = Math.max(16, Math.round(EGG_BOX * cellSize * EGG_SCALE * dpr));
+    if (eggCv.width !== px) { eggCv.width = px; eggCv.height = px; }
+    ectx.setTransform(1, 0, 0, 1, 0, 0);
+    ectx.globalCompositeOperation = 'source-over';
+    ectx.imageSmoothingEnabled = true;
+    ectx.clearRect(0, 0, px, px);
+    const unit = px / EGG_BOX;
+    ectx.setTransform(unit, 0, 0, unit, px / 2, px / 2);
+    drawEggLines(ectx);
+    buildPixelRamp(shift);
+    ectx.setTransform(1, 0, 0, 1, 0, 0);
+    ectx.globalCompositeOperation = 'source-in';
+    ectx.imageSmoothingEnabled = false;      // keep the ramp's blocks hard-edged
+    ectx.drawImage(pxCv, 0, 0, px, px);
+    ectx.globalCompositeOperation = 'source-over';
+  }
+
+  // paints the egg in local unit space (1 unit = 1 cell), centred on the origin
+  function paintEgg(glow) {
+    eggBodyPath(ctx);
+    ctx.fillStyle = '#0b0b0c';
+    ctx.fill();
+    ctx.save();
+    if (glow > 0) {
+      ctx.shadowColor = 'rgba(242,201,76,0.85)';
+      ctx.shadowBlur = 0.02 + 0.09 * glow;
+    }
+    ctx.drawImage(eggCv, -EGG_BOX / 2, -EGG_BOX / 2, EGG_BOX, EGG_BOX);
     ctx.restore();
   }
 
   function drawEggAt(cx, cy, angle, scaleUnit, alpha, glow) {
     ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.translate(cx, cy);
     ctx.rotate(angle);
     ctx.scale(scaleUnit, scaleUnit);
-    drawEggShape(alpha, glow);
+    paintEgg(glow);
     ctx.restore();
   }
 
@@ -1131,14 +1211,20 @@
     const norm = Math.hypot(dirX, dirY);
     const dist = p * p * 1.6;
     ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.translate(cx, cy);
     ctx.translate((dirX / norm) * dist * scaleUnit, (dirY / norm) * dist * scaleUnit);
     ctx.rotate(side * p * 1.3);
     ctx.scale(scaleUnit, scaleUnit);
-    ctx.beginPath();
-    ctx.rect(side < 0 ? -2.2 : 0, -2.4, 2.2, 4.8);
+    ctx.beginPath();                      // the shell comes apart along its own fracture
+    ctx.moveTo(EGG_SPLIT[0].x, -2.6);
+    for (const q of EGG_SPLIT) ctx.lineTo(q.x, q.y);
+    ctx.lineTo(EGG_SPLIT[EGG_SPLIT.length - 1].x, 2.6);
+    ctx.lineTo(side < 0 ? -2.4 : 2.4, 2.6);
+    ctx.lineTo(side < 0 ? -2.4 : 2.4, -2.6);
+    ctx.closePath();
     ctx.clip();
-    drawEggShape(alpha, 0);
+    paintEgg(0);
     ctx.restore();
   }
 
@@ -1147,7 +1233,9 @@
     const angle = Math.sin(now / 900) * 0.09;
     const bob = Math.sin(now / 900) * cellSize * 0.02;
     const glow = 0.5 + 0.5 * Math.sin(now / 500);
-    drawEggAt(cx, cy + bob, angle, cellSize, 1, glow);
+    // the gradient drifts down the shell and slides back again while we wait
+    buildEggArt(Math.sin(now / 1600) * 0.6);
+    drawEggAt(cx, cy + bob, angle, cellSize * EGG_SCALE, 1, glow);
   }
 
   function easeOutBack(x) {
@@ -1161,16 +1249,18 @@
       const p = e / HATCH_SHAKE;
       const angle = Math.sin(e / 55) * (0.05 + 0.22 * p);
       const bob = Math.sin(e / 70) * cellSize * 0.05 * p;
-      drawEggAt(cx, cy + bob, angle, cellSize, 1, 0.3 + 0.7 * p);
+      buildEggArt(-e / 600);            // the gradient races as the shell strains
+      drawEggAt(cx, cy + bob, angle, cellSize * EGG_SCALE, 1, 0.3 + 0.7 * p);
       return;
     }
     const p = Math.min(1, (e - HATCH_SHAKE) / HATCH_BURST);
+    buildEggArt(-HATCH_SHAKE / 600);
     if (p < 0.3) {
       ctx.save();
       ctx.globalAlpha = (1 - p / 0.3) * 0.55;
       ctx.fillStyle = '#f2c94c';
       ctx.beginPath();
-      ctx.arc(cx, cy, cellSize * 2.3, 0, Math.PI * 2);
+      ctx.arc(cx, cy, cellSize * 2.9, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -1182,8 +1272,8 @@
     const pose = poseGecko();
     if (pose) renderGecko(pose);
     ctx.restore();
-    drawEggShard(-1, cx, cy, cellSize, p);
-    drawEggShard(1, cx, cy, cellSize, p);
+    drawEggShard(-1, cx, cy, cellSize * EGG_SCALE, p);
+    drawEggShard(1, cx, cy, cellSize * EGG_SCALE, p);
   }
 
   // ================= drawing =================
