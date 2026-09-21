@@ -237,7 +237,6 @@
       stageWord: 'ステージ',
       start: 'スタート',
       pokeHint: '卵をつついてみよう',
-      pokeMore: n => 'あと ' + n + ' 回',
       stageClearTitle: n => 'ステージ ' + n + ' クリア！',
       clearText: 'ハエも逆行ハエも、ぜんぶ食べきった！',
       hintStage3: 'ここからハエが跳びはじめる！',
@@ -272,7 +271,6 @@
       stageWord: 'Stage',
       start: 'Start',
       pokeHint: 'Tap the egg',
-      pokeMore: n => n + ' more',
       stageClearTitle: n => 'Stage ' + n + ' Clear!',
       clearText: 'Every fly is eaten, forward and blue alike!',
       hintStage3: 'Flies start hopping from here!',
@@ -374,7 +372,7 @@
     msgEl.classList.toggle('boot', msgState.kind === 'boot');
     if (msgState.kind === 'boot') {
       msgTitle.textContent = s.title;
-      msgText.textContent = pokes === 0 ? s.pokeHint : s.pokeMore(POKE_TARGET - pokes);
+      msgText.textContent = s.pokeHint;
       msgBtn.style.display = savedStage > 1 ? '' : 'none';
       if (savedStage > 1) msgBtn.textContent = s.continueFrom(savedStage);
     } else if (msgState.kind === 'win') {
@@ -827,8 +825,8 @@
     if (rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(loop);
   }
-  const HATCH_SHAKE = 550;    // ms: the egg trembles, cracks glowing brighter
-  const HATCH_BURST = 950;    // ms: the shell crumbles away pixel by pixel
+  const HATCH_SHAKE = 850;    // ms: the egg trembles while the fracture spreads
+  const HATCH_BURST = 1800;   // ms: the shell crumbles away pixel by pixel
   const HATCH_SETTLE = 220;   // ms: a beat to look at the gecko before play begins
   const HATCH_TOTAL = HATCH_SHAKE + HATCH_BURST + HATCH_SETTLE;
   let erosion = 0;       // 0 = normal, 1 = the negative has taken the whole board
@@ -1230,7 +1228,7 @@
   // inside of the shell and 2 is a pale line. Nothing here is drawn with
   // curves, so every edge stays on a whole pixel however large it is scaled.
   const EGG_W = 25, EGG_H = 34;
-  const POKE_TARGET = 4;               // pokes the shell takes before it gives way
+  const CRACK_STAGES = 4;              // how far the fracture is drawn out as it spreads
 
   const EGG_BANDS = [10, 19, 22];
   const EGG_DIAMONDS = [
@@ -1293,7 +1291,7 @@
     }
   }
 
-  // one grid per number of pokes taken, so a strike just swaps which one is drawn
+  // one grid per step of the fracture, so spreading it is only a swap
   function buildEggGrid(stage) {
     const g = new Uint8Array(EGG_W * EGG_H);
     for (let y = 0; y < EGG_H; y++) {
@@ -1321,7 +1319,7 @@
     EGG_DOTS.forEach(o => stampBlob(g, o.x, o.y, (dx, dy) => dx * dx + dy * dy <= o.r * o.r, 2));
 
     if (stage > 0) {
-      const reach = 1 + Math.round((EGG_SPLIT.length - 1) * (stage / POKE_TARGET));
+      const reach = 1 + Math.round((EGG_SPLIT.length - 1) * (stage / CRACK_STAGES));
       const open = [EGG_SPLIT.slice(0, reach)];
       EGG_BRANCHES.forEach(b => { if (stage >= b.at) open.push(b.pts); });
       // clear a dark channel first so the break reads through any marking
@@ -1332,7 +1330,7 @@
   }
 
   const EGG_GRIDS = [];
-  for (let s = 0; s <= POKE_TARGET; s++) EGG_GRIDS.push(buildEggGrid(s));
+  for (let s = 0; s <= CRACK_STAGES; s++) EGG_GRIDS.push(buildEggGrid(s));
 
   // ---- the pale lines are lit through a stepped gradient that drifts and returns ----
   let EGG_RAMP = [];
@@ -1402,18 +1400,14 @@
       && Math.abs(y - boardPx / 2) <= EGG_H * scale / 2;
   }
 
-  let pokes = 0;
-  let pokeAt = -1e9;                   // when the shell was last struck
 
   function drawEggIdle(now) {
     const scale = eggPixelSize();
-    const jolt = Math.max(0, 1 - (now - pokeAt) / 300);
     // the wobble moves in whole pixels: rotating or easing would soften the edges
     const sway = Math.round(Math.sin(now / 780));
-    const kick = Math.round(Math.sin((now - pokeAt) / 24) * 3 * jolt);
-    const bob = Math.round(Math.sin(now / 900) + Math.sin((now - pokeAt) / 31) * 2 * jolt);
-    paintEggPixels(EGG_GRIDS[Math.min(pokes, POKE_TARGET)], Math.sin(now / 1600) * 0.6);
-    drawEggPixels(boardPx / 2 + (sway + kick) * scale, boardPx / 2 + bob * scale, scale, 0.25 * jolt);
+    const bob = Math.round(Math.sin(now / 900));
+    paintEggPixels(EGG_GRIDS[0], Math.sin(now / 1600) * 0.6);
+    drawEggPixels(boardPx / 2 + sway * scale, boardPx / 2 + bob * scale, scale, 0);
   }
 
   function easeOutBack(x) {
@@ -1445,7 +1439,7 @@
   }
 
   const EGG_FALL = (() => {
-    const g = EGG_GRIDS[POKE_TARGET], out = [];
+    const g = EGG_GRIDS[CRACK_STAGES], out = [];
     for (let y = 0; y < EGG_H; y++) {
       for (let x = 0; x < EGG_W; x++) {
         if (!g[y * EGG_W + x]) continue;
@@ -1492,12 +1486,13 @@
       const p = e / HATCH_SHAKE;
       const kick = Math.round(Math.sin(e / 38) * (1 + 3 * p));
       const bob = Math.round(Math.sin(e / 52) * 2 * p);
-      paintEggPixels(EGG_GRIDS[POKE_TARGET], -e / 600);   // the gradient races as the shell strains
+      const step = Math.min(CRACK_STAGES, 1 + Math.floor(p * CRACK_STAGES));
+      paintEggPixels(EGG_GRIDS[step], -e / 600);   // the gradient races as the shell strains
       drawEggPixels(cx + kick * scale, cy + bob * scale, scale, 0.3 + 0.7 * p);
       return;
     }
     const p = Math.min(1, (e - HATCH_SHAKE) / HATCH_BURST);
-    paintEggPixels(EGG_GRIDS[POKE_TARGET], -HATCH_SHAKE / 600);
+    paintEggPixels(EGG_GRIDS[CRACK_STAGES], -HATCH_SHAKE / 600);
     if (p < 0.2) {
       ctx.save();
       ctx.globalAlpha = (1 - p / 0.2) * 0.55;
@@ -1926,9 +1921,7 @@
     if (phase !== 'idle') return;
     const r = canvas.getBoundingClientRect();
     if (!eggHit((e.clientX - r.left) / r.width * boardPx, (e.clientY - r.top) / r.height * boardPx)) return;
-    pokes++;
-    pokeAt = performance.now();
-    if (pokes >= POKE_TARGET) startHatch(); else renderMsg();
+    startHatch();
   });
   window.addEventListener('resize', resize);
 
