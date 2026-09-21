@@ -69,8 +69,6 @@
   }
   #msg h2 { margin: 0 0 10px 0; font-size: 26px; font-weight: 400; letter-spacing: 0.06em; }
   #msg p { white-space: pre-line; margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; max-width: 30em; }
-  #msg .rules { text-align: left; display: inline-block; }
-  #msg .y { color: var(--cream); } #msg .b { color: var(--blue); }
   #msg button {
     background: var(--gold); color: #111; border: none; border-radius: 8px;
     padding: 10px 20px; font-size: 17px; letter-spacing: 0.08em;
@@ -105,6 +103,7 @@
   body.rewinding #knob { background: radial-gradient(circle at 40% 35%, #2b2c31, #17181b); }
   #app, body, #boardWrap, #barWrap, #stick, #knob { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
   #hint { margin-top: 10px; min-height: 1.6em; font-size: 14px; opacity: 0.85; text-align: center; line-height: 1.6; }
+  #hud, #barWrap, #hint { display: none; }
 </style>
 </head>
 <body>
@@ -1151,15 +1150,6 @@
   buildStage();
   phase = 'idle';
   msgTitle.textContent = '回帰性家守';
-  msgText.innerHTML =
-    '<span class="rules">' +
-    'スティックでヤモリを歩かせよう<br>' +
-    '<span class="y">●ハエ</span>　前進中に食べる<br>' +
-    '<span class="b">●逆行ハエ</span>　逆行中にしか食べられない<br>' +
-    '時間切れで世界が反転し、<br>歩いた道を鏡写しで巻き戻る<br>' +
-    '<span class="b">青い影</span>は、逆行するときの自分<br>' +
-    '逆行ハエの数字は「何秒のときに通るか」' +
-    '</span>';
   msgBtn.textContent = 'スタート';
   hintEl.textContent = HINT.idle;
   msgEl.style.display = 'flex';
