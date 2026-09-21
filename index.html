@@ -59,12 +59,6 @@
   .dot.y { background: var(--cream); }
   .dot.b { background: var(--blue); box-shadow: 0 0 0 2px rgba(111,211,242,0.35); }
   body.rewinding #phase.rewind { color: #1f6f8a; }
-  #barWrap {
-    width: 100%; max-width: 460px; height: 5px; background: #2a2b30;
-    border-radius: 3px; overflow: hidden; margin-bottom: 8px;
-  }
-  #bar { height: 100%; width: 0%; background: var(--gold); }
-  #bar.rewind { background: var(--blue); }
   #boardWrap {
     position: relative; width: 100%; max-width: 460px; aspect-ratio: 1/1;
     border-radius: 12px; overflow: hidden;
@@ -77,7 +71,7 @@
     background: rgba(8,8,10,0.86); text-align: center; padding: 20px;
     transition: background 0.4s;
   }
-  #msg.boot { justify-content: space-between; background: rgba(8,8,10,0.30); }
+  #msg.boot { justify-content: space-between; background: rgba(8,8,10,0.30); pointer-events: none; }
   #msg h2 { margin: 0 0 10px 0; font-size: 26px; font-weight: 400; letter-spacing: 0.06em; }
   #msg p { white-space: pre-line; margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; max-width: 30em; }
   #msg button {
@@ -106,15 +100,14 @@
   body.rewinding { background: #e9e6dc; }
   body.rewinding #app { color: #1a1b1e; }
   body.rewinding #boardWrap { box-shadow: 0 0 0 2px #fff, 0 8px 24px rgba(0,0,0,0.25); }
-  body.rewinding #barWrap { background: #cdc9bd; }
   body.rewinding #stick {
     background: radial-gradient(circle at 50% 45%, #d3d0c6, #b4b1a7 70%);
     border-color: #a5a299;
   }
   body.rewinding #knob { background: radial-gradient(circle at 40% 35%, #2b2c31, #17181b); }
-  #app, body, #boardWrap, #barWrap, #stick, #knob { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
+  #app, body, #boardWrap, #stick, #knob { transition: background 3.8s, color 3.8s, box-shadow 3.8s; }
   #hint { margin-top: 10px; min-height: 1.6em; font-size: 14px; opacity: 0.85; text-align: center; line-height: 1.6; }
-  #hud, #barWrap, #hint { display: none; }
+  #hud, #hint { display: none; }
 </style>
 </head>
 <body>
@@ -133,7 +126,6 @@
       <span class="stat"><i class="dot b"></i>逆行ハエ <span id="bc">0/0</span></span>
     </div>
   </div>
-  <div id="barWrap"><div id="bar"></div></div>
   <div id="boardWrap">
     <canvas id="game"></canvas>
     <div id="msg">
@@ -151,7 +143,6 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const phaseEl = document.getElementById('phase');
-  const barEl = document.getElementById('bar');
   const wcEl = document.getElementById('wc');
   const bcEl = document.getElementById('bc');
   const stageEl = document.getElementById('stage');
@@ -177,6 +168,8 @@
       title: '回帰性家守',
       stageWord: 'ステージ',
       start: 'スタート',
+      pokeHint: '卵をつついてみよう',
+      pokeMore: n => 'あと ' + n + ' 回',
       stageClearTitle: n => 'ステージ ' + n + ' クリア！',
       clearText: 'ハエも逆行ハエも、ぜんぶ食べきった！',
       hintStage3: 'ここからハエが跳びはじめる！',
@@ -196,6 +189,8 @@
       title: 'Rewind Gecko',
       stageWord: 'Stage',
       start: 'Start',
+      pokeHint: 'Tap the egg',
+      pokeMore: n => n + ' more',
       stageClearTitle: n => 'Stage ' + n + ' Clear!',
       clearText: 'Every fly is eaten, forward and blue alike!',
       hintStage3: 'Flies start hopping from here!',
@@ -220,8 +215,8 @@
     msgEl.classList.toggle('boot', msgState.kind === 'boot');
     if (msgState.kind === 'boot') {
       msgTitle.textContent = s.title;
-      msgText.textContent = '';
-      msgBtn.textContent = s.start;
+      msgText.textContent = pokes === 0 ? s.pokeHint : s.pokeMore(POKE_TARGET - pokes);
+      msgBtn.style.display = 'none';
     } else if (msgState.kind === 'clear') {
       const cleared = msgState.clearedStage;
       msgTitle.textContent = s.stageClearTitle(cleared);
@@ -229,8 +224,10 @@
       if (cleared === 2) t += '\n' + s.hintStage3;
       else if (cleared >= 3) t += '\n' + s.hintStageMore;
       msgText.textContent = t;
+      msgBtn.style.display = '';
       msgBtn.textContent = s.next;
     } else {
+      msgBtn.style.display = '';
       msgTitle.textContent = s.failTitle;
       msgText.textContent = s.failText(msgState.whiteLeft, msgState.blueLeft);
       msgBtn.textContent = s.retry;
@@ -784,7 +781,6 @@
     phaseEl.textContent = '▶ 前進';
     hintEl.textContent = HINT.forward;
     phaseEl.className = 'forward';
-    barEl.className = '';
     erosion = 0; seeds = [];
     document.body.classList.remove('rewinding');
     stickEl.classList.remove('locked');
@@ -807,7 +803,6 @@
     phaseEl.textContent = '◀◀ 逆行';
     hintEl.textContent = HINT.rewind;
     phaseEl.className = 'rewind';
-    barEl.className = 'rewind';
     stickEl.classList.add('locked');
     document.body.classList.add('rewinding');
     // the inversion starts at the gecko and creeps outward, with a few side blooms
@@ -986,156 +981,124 @@
   }
 
   // ================= title egg =================
-  // A small deterministic PRNG so the shell's markings stay put between frames.
-  function makeRand(seed) {
-    let s = seed >>> 0;
-    return function () {
-      s = (s + 0x6D2B79F5) | 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
+  // The shell is pixel art: a small grid where 0 is open air, 1 is the dark
+  // inside of the shell and 2 is a pale line. Nothing here is drawn with
+  // curves, so every edge stays on a whole pixel however large it is scaled.
+  const EGG_W = 25, EGG_H = 34;
+  const POKE_TARGET = 4;               // pokes the shell takes before it gives way
 
-  const EGG_RX = 1.05, EGG_RY = 1.52;   // half-size of the egg, in cells
-  function eggOutline(n) {
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const rx = Math.sin(a), ry = -Math.cos(a);
-      const taper = ry < 0 ? 1 + 0.30 * ry : 1;   // narrower top, round bottom
-      pts.push({ x: EGG_RX * rx * taper, y: EGG_RY * ry });
-    }
-    return pts;
-  }
-  const EGG_PATH = eggOutline(64);
-  function eggBodyPath(g) {
-    g.beginPath();
-    g.moveTo(EGG_PATH[0].x, EGG_PATH[0].y);
-    for (let i = 1; i < EGG_PATH.length; i++) g.lineTo(EGG_PATH[i].x, EGG_PATH[i].y);
-    g.closePath();
-  }
-
-  function jaggedPath(x0, y0, x1, y1, n, jitter, seed) {
-    const r = makeRand(seed);
-    const nx = -(y1 - y0), ny = (x1 - x0);
-    const nl = Math.hypot(nx, ny) || 1;
-    const pts = [{ x: x0, y: y0 }];
-    for (let i = 1; i < n; i++) {
-      const u = i / n;
-      const j = (r() - 0.5) * jitter;
-      pts.push({ x: x0 + (x1 - x0) * u + (nx / nl) * j, y: y0 + (y1 - y0) * u + (ny / nl) * j });
-    }
-    pts.push({ x: x1, y: y1 });
-    return pts;
-  }
-
-  // banded stripes, diamonds and dots, echoing the gecko's own markings
-  const EGG_BANDS = [
-    { y: -0.88, sag: 0.17 },
-    { y: -0.24, sag: 0.17 },
-    { y: 0.04, sag: 0.16 },
-    { y: 0.20, sag: 0.16 }
-  ];
+  const EGG_BANDS = [10, 19, 22];
   const EGG_DIAMONDS = [
-    { x: -0.44, y: -1.02, s: 0.24 },
-    { x: 0.14, y: -1.12, s: 0.22 },
-    { x: -0.60, y: -0.54, s: 0.26 },
-    { x: 0.52, y: -0.60, s: 0.22 },
-    { x: -0.62, y: 0.52, s: 0.24 },
-    { x: -0.12, y: 0.46, s: 0.30 },
-    { x: 0.56, y: 0.40, s: 0.26 },
-    { x: -0.28, y: 1.00, s: 0.26 },
-    { x: 0.46, y: 0.94, s: 0.22 }
+    { x: 9, y: 6, r: 2 }, { x: 16, y: 6, r: 2 },
+    { x: 5, y: 15, r: 2 }, { x: 19, y: 15, r: 2 },
+    { x: 7, y: 27, r: 2 }, { x: 12, y: 27, r: 2 }, { x: 17, y: 27, r: 2 }
   ];
   const EGG_DOTS = [
-    { x: -0.14, y: -0.56, r: 0.12 },
-    { x: 0.24, y: -0.64, r: 0.12 },
-    { x: 0.32, y: 0.50, r: 0.14 },
-    { x: 0.08, y: 1.04, r: 0.13 }
+    { x: 10, y: 15, r: 1.6 }, { x: 15, y: 15, r: 1.6 }
   ];
-  // the shell is already giving way: one long split, with branches out to the rim
-  const EGG_SPLIT = jaggedPath(0.34, -1.40, 0.06, 1.30, 11, 0.34, 7);
-  function splitAt(f) {
-    const i = Math.max(0, Math.min(EGG_SPLIT.length - 1, Math.round(f * (EGG_SPLIT.length - 1))));
-    return EGG_SPLIT[i];
-  }
+  // the fracture is drawn by hand so each poke opens a believable next stretch
+  const EGG_SPLIT = [
+    { x: 16, y: 1 }, { x: 15, y: 5 }, { x: 17, y: 9 }, { x: 15, y: 13 },
+    { x: 16, y: 17 }, { x: 14, y: 21 }, { x: 15, y: 25 }, { x: 13, y: 29 },
+    { x: 14, y: 33 }
+  ];
   const EGG_BRANCHES = [
-    (p => jaggedPath(p.x, p.y, 1.25, p.y - 0.22, 4, 0.16, 13))(splitAt(0.30)),
-    (p => jaggedPath(p.x, p.y, 1.25, p.y + 0.12, 4, 0.16, 29))(splitAt(0.62)),
-    (p => jaggedPath(p.x, p.y, 1.10, p.y + 0.20, 3, 0.14, 41))(splitAt(0.85))
+    { at: 2, pts: [{ x: 17, y: 9 }, { x: 20, y: 8 }, { x: 24, y: 10 }] },
+    { at: 3, pts: [{ x: 16, y: 17 }, { x: 20, y: 18 }, { x: 24, y: 16 }] },
+    { at: 4, pts: [{ x: 15, y: 25 }, { x: 19, y: 26 }, { x: 23, y: 24 }] }
   ];
 
-  function strokePath(g, pts) {
-    g.beginPath();
-    g.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
-    g.stroke();
+  function eggInside(px, py) {
+    const ex = (px + 0.5 - EGG_W / 2) / (EGG_W / 2);
+    const ey = (py + 0.5 - EGG_H / 2) / (EGG_H / 2);
+    const taper = ey < 0 ? 1 + 0.30 * ey : 1;   // narrower top, round bottom
+    return (ex / taper) * (ex / taper) + ey * ey <= 1;
   }
 
-  // every pale line of the shell, drawn flat white so it can be tinted as one mask
-  function drawEggLines(g) {
-    g.save();
-    eggBodyPath(g);
-    g.clip();
-    g.fillStyle = '#fff';
-    g.strokeStyle = '#fff';
-    g.lineJoin = 'round';
-    g.lineCap = 'round';
-
-    g.lineWidth = 0.075;
-    EGG_BANDS.forEach(b => {
-      g.beginPath();
-      g.moveTo(-1.4, b.y + b.sag);
-      g.quadraticCurveTo(0, b.y - b.sag, 1.4, b.y + b.sag);
-      g.stroke();
-    });
-
-    EGG_DIAMONDS.forEach(d => {
-      g.save();
-      g.translate(d.x, d.y);
-      g.rotate(Math.PI / 4);
-      g.fillRect(-d.s / 2, -d.s / 2, d.s, d.s);
-      g.restore();
-    });
-
-    EGG_DOTS.forEach(o => {
-      g.beginPath();
-      g.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-      g.fill();
-    });
-
-    // the fracture first clears a channel through the markings, then draws into it,
-    // so the shell reads as separate plates however the pattern happens to fall
-    const crack = () => { strokePath(g, EGG_SPLIT); EGG_BRANCHES.forEach(b => strokePath(g, b)); };
-    g.globalCompositeOperation = 'destination-out';
-    g.lineWidth = 0.20;
-    crack();
-    g.globalCompositeOperation = 'source-over';
-    g.lineWidth = 0.10;
-    crack();
-    g.restore();
-
-    eggBodyPath(g);
-    g.lineWidth = 0.14;
-    g.lineJoin = 'round';
-    g.strokeStyle = '#fff';
-    g.stroke();
+  // paints one pixel, but only where there is shell to paint on
+  function setShell(grid, x, y, code) {
+    if (x < 0 || y < 0 || x >= EGG_W || y >= EGG_H) return;
+    const i = y * EGG_W + x;
+    if (grid[i] !== 0) grid[i] = code;
   }
 
-  // ---- the shell's lines are painted through a stepped, low-resolution gradient ----
-  const EGG_BOX = 3.4;                 // unit-space square the whole egg fits inside
-  const EGG_SCALE = 1.5;               // the title egg sits larger than one board cell
+  function stampBlob(grid, cx, cy, hit, code) {
+    const r = 5;
+    for (let y = cy - r; y <= cy + r; y++) {
+      for (let x = cx - r; x <= cx + r; x++) {
+        if (hit(x - cx, y - cy)) setShell(grid, x, y, code);
+      }
+    }
+  }
+
+  function tracePath(grid, pts, code, radius) {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const steps = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) * 3));
+      for (let s = 0; s <= steps; s++) {
+        const cx = a.x + (b.x - a.x) * (s / steps);
+        const cy = a.y + (b.y - a.y) * (s / steps);
+        if (radius <= 0) { setShell(grid, Math.round(cx), Math.round(cy), code); continue; }
+        for (let y = Math.floor(cy - radius); y <= cy + radius; y++) {
+          for (let x = Math.floor(cx - radius); x <= cx + radius; x++) {
+            if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius) setShell(grid, x, y, code);
+          }
+        }
+      }
+    }
+  }
+
+  // one grid per number of pokes taken, so a strike just swaps which one is drawn
+  function buildEggGrid(stage) {
+    const g = new Uint8Array(EGG_W * EGG_H);
+    for (let y = 0; y < EGG_H; y++) {
+      for (let x = 0; x < EGG_W; x++) if (eggInside(x, y)) g[y * EGG_W + x] = 1;
+    }
+
+    // the rim, two pixels thick: each pass lights the outermost dark ring left
+    const isGap = (x, y) =>
+      x < 0 || y < 0 || x >= EGG_W || y >= EGG_H || g[y * EGG_W + x] !== 1;
+    for (let pass = 0; pass < 2; pass++) {
+      const rim = [];
+      for (let y = 0; y < EGG_H; y++) {
+        for (let x = 0; x < EGG_W; x++) {
+          if (g[y * EGG_W + x] !== 1) continue;
+          if (isGap(x - 1, y) || isGap(x + 1, y) || isGap(x, y - 1) || isGap(x, y + 1)) rim.push(y * EGG_W + x);
+        }
+      }
+      rim.forEach(i => { g[i] = 2; });
+    }
+
+    EGG_BANDS.forEach(row => {
+      for (let x = 0; x < EGG_W; x++) if (g[row * EGG_W + x] === 1) g[row * EGG_W + x] = 2;
+    });
+    EGG_DIAMONDS.forEach(d => stampBlob(g, d.x, d.y, (dx, dy) => Math.abs(dx) + Math.abs(dy) <= d.r, 2));
+    EGG_DOTS.forEach(o => stampBlob(g, o.x, o.y, (dx, dy) => dx * dx + dy * dy <= o.r * o.r, 2));
+
+    if (stage > 0) {
+      const reach = 1 + Math.round((EGG_SPLIT.length - 1) * (stage / POKE_TARGET));
+      const open = [EGG_SPLIT.slice(0, reach)];
+      EGG_BRANCHES.forEach(b => { if (stage >= b.at) open.push(b.pts); });
+      // clear a dark channel first so the break reads through any marking
+      open.forEach(p => tracePath(g, p, 1, 1));
+      open.forEach(p => tracePath(g, p, 2, 0));
+    }
+    return g;
+  }
+
+  const EGG_GRIDS = [];
+  for (let s = 0; s <= POKE_TARGET; s++) EGG_GRIDS.push(buildEggGrid(s));
+
+  // ---- the pale lines are lit through a stepped gradient that drifts and returns ----
   const EGG_RAMP = [
     [248, 241, 226], [250, 226, 160], [242, 201, 76],
     [216, 154, 58], [242, 201, 76], [250, 226, 160]
   ];
   const RAMP_STEPS = 8;                // how many flat colours the ramp collapses to
-  const PX_COLS = 11, PX_ROWS = 16;    // how coarse the pixels across the egg are
   const eggCv = document.createElement('canvas');
+  eggCv.width = EGG_W; eggCv.height = EGG_H;
   const ectx = eggCv.getContext('2d');
-  const pxCv = document.createElement('canvas');
-  const pctx = pxCv.getContext('2d');
+  const eggImg = ectx.createImageData(EGG_W, EGG_H);
 
   function rampColor(v) {
     v -= Math.floor(v);
@@ -1144,98 +1107,67 @@
     const i = Math.floor(f) % EGG_RAMP.length;
     const a = EGG_RAMP[i], b = EGG_RAMP[(i + 1) % EGG_RAMP.length];
     const k = f - Math.floor(f);
-    const mix = j => Math.round(a[j] + (b[j] - a[j]) * k);
-    return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * k),
+      Math.round(a[1] + (b[1] - a[1]) * k),
+      Math.round(a[2] + (b[2] - a[2]) * k)
+    ];
   }
 
-  function buildPixelRamp(shift) {
-    if (pxCv.width !== PX_COLS) { pxCv.width = PX_COLS; pxCv.height = PX_ROWS; }
-    for (let y = 0; y < PX_ROWS; y++) {
-      for (let x = 0; x < PX_COLS; x++) {
-        const u = (x / (PX_COLS - 1)) * 0.5 + (y / (PX_ROWS - 1)) * 0.75;
-        pctx.fillStyle = rampColor(u - shift);
-        pctx.fillRect(x, y, 1, 1);
+  function paintEggPixels(grid, shift) {
+    const d = eggImg.data;
+    for (let y = 0; y < EGG_H; y++) {
+      for (let x = 0; x < EGG_W; x++) {
+        const o = (y * EGG_W + x) * 4;
+        const code = grid[y * EGG_W + x];
+        if (code === 0) { d[o + 3] = 0; continue; }
+        if (code === 1) { d[o] = 11; d[o + 1] = 11; d[o + 2] = 13; d[o + 3] = 255; continue; }
+        const u = (x / (EGG_W - 1)) * 0.5 + (y / (EGG_H - 1)) * 0.75;
+        const c = rampColor(u - shift);
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
       }
     }
+    ectx.putImageData(eggImg, 0, 0);
   }
 
-  // redraws the tinted line art offscreen; call once per frame before painting the egg
-  function buildEggArt(shift) {
+  // a shell pixel is a whole number of device pixels, so the art never resamples
+  function eggPixelSize() {
     const dpr = canvas.width / Math.max(1, boardPx);
-    const px = Math.max(16, Math.round(EGG_BOX * cellSize * EGG_SCALE * dpr));
-    if (eggCv.width !== px) { eggCv.width = px; eggCv.height = px; }
-    ectx.setTransform(1, 0, 0, 1, 0, 0);
-    ectx.globalCompositeOperation = 'source-over';
-    ectx.imageSmoothingEnabled = true;
-    ectx.clearRect(0, 0, px, px);
-    const unit = px / EGG_BOX;
-    ectx.setTransform(unit, 0, 0, unit, px / 2, px / 2);
-    drawEggLines(ectx);
-    buildPixelRamp(shift);
-    ectx.setTransform(1, 0, 0, 1, 0, 0);
-    ectx.globalCompositeOperation = 'source-in';
-    ectx.imageSmoothingEnabled = false;      // keep the ramp's blocks hard-edged
-    ectx.drawImage(pxCv, 0, 0, px, px);
-    ectx.globalCompositeOperation = 'source-over';
+    return Math.max(1, Math.round(cellSize * 5.0 / EGG_H * dpr)) / dpr;
   }
 
-  // paints the egg in local unit space (1 unit = 1 cell), centred on the origin
-  function paintEgg(glow) {
-    eggBodyPath(ctx);
-    ctx.fillStyle = '#0b0b0c';
-    ctx.fill();
+  function drawEggPixels(cx, cy, scale, glow) {
+    const dpr = canvas.width / Math.max(1, boardPx);
+    const w = EGG_W * scale, h = EGG_H * scale;
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
     if (glow > 0) {
       ctx.shadowColor = 'rgba(242,201,76,0.85)';
-      ctx.shadowBlur = 0.02 + 0.09 * glow;
+      ctx.shadowBlur = cellSize * (0.04 + 0.16 * glow);
     }
-    ctx.drawImage(eggCv, -EGG_BOX / 2, -EGG_BOX / 2, EGG_BOX, EGG_BOX);
+    ctx.drawImage(eggCv, Math.round((cx - w / 2) * dpr) / dpr, Math.round((cy - h / 2) * dpr) / dpr, w, h);
     ctx.restore();
   }
 
-  function drawEggAt(cx, cy, angle, scaleUnit, alpha, glow) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(cx, cy);
-    ctx.rotate(angle);
-    ctx.scale(scaleUnit, scaleUnit);
-    paintEgg(glow);
-    ctx.restore();
+  // whether a board-space point lands on the egg, for deciding what counts as a poke
+  function eggHit(x, y) {
+    const scale = eggPixelSize();
+    return Math.abs(x - boardPx / 2) <= EGG_W * scale / 2
+      && Math.abs(y - boardPx / 2) <= EGG_H * scale / 2;
   }
 
-  // one half of the broken shell, clipped and carried outward as it flies apart
-  function drawEggShard(side, cx, cy, scaleUnit, p) {
-    const alpha = Math.max(0, 1 - p * 1.15);
-    if (alpha <= 0) return;
-    const dirX = side, dirY = -0.65;
-    const norm = Math.hypot(dirX, dirY);
-    const dist = p * p * 1.6;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(cx, cy);
-    ctx.translate((dirX / norm) * dist * scaleUnit, (dirY / norm) * dist * scaleUnit);
-    ctx.rotate(side * p * 1.3);
-    ctx.scale(scaleUnit, scaleUnit);
-    ctx.beginPath();                      // the shell comes apart along its own fracture
-    ctx.moveTo(EGG_SPLIT[0].x, -2.6);
-    for (const q of EGG_SPLIT) ctx.lineTo(q.x, q.y);
-    ctx.lineTo(EGG_SPLIT[EGG_SPLIT.length - 1].x, 2.6);
-    ctx.lineTo(side < 0 ? -2.4 : 2.4, 2.6);
-    ctx.lineTo(side < 0 ? -2.4 : 2.4, -2.6);
-    ctx.closePath();
-    ctx.clip();
-    paintEgg(0);
-    ctx.restore();
-  }
+  let pokes = 0;
+  let pokeAt = -1e9;                   // when the shell was last struck
 
   function drawEggIdle(now) {
-    const cx = boardPx / 2, cy = boardPx / 2;
-    const angle = Math.sin(now / 900) * 0.09;
-    const bob = Math.sin(now / 900) * cellSize * 0.02;
-    const glow = 0.5 + 0.5 * Math.sin(now / 500);
-    // the gradient drifts down the shell and slides back again while we wait
-    buildEggArt(Math.sin(now / 1600) * 0.6);
-    drawEggAt(cx, cy + bob, angle, cellSize * EGG_SCALE, 1, glow);
+    const scale = eggPixelSize();
+    const jolt = Math.max(0, 1 - (now - pokeAt) / 300);
+    // the wobble moves in whole pixels: rotating or easing would soften the edges
+    const sway = Math.round(Math.sin(now / 780));
+    const kick = Math.round(Math.sin((now - pokeAt) / 24) * 3 * jolt);
+    const bob = Math.round(Math.sin(now / 900) + Math.sin((now - pokeAt) / 31) * 2 * jolt);
+    paintEggPixels(EGG_GRIDS[Math.min(pokes, POKE_TARGET)], Math.sin(now / 1600) * 0.6);
+    drawEggPixels(boardPx / 2 + (sway + kick) * scale, boardPx / 2 + bob * scale, scale, 0.25 * jolt);
   }
 
   function easeOutBack(x) {
@@ -1243,18 +1175,44 @@
     return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
   }
 
+  // one side of the broken shell, cut along the fracture and carried outward
+  function drawEggShard(side, cx, cy, scale, p) {
+    const alpha = Math.max(0, 1 - p * 1.15);
+    if (alpha <= 0) return;
+    const w = EGG_W * scale, h = EGG_H * scale;
+    const x0 = cx - w / 2, y0 = cy - h / 2;
+    const dirX = side, dirY = -0.65, n = Math.hypot(dirX, dirY);
+    const dist = p * p * 1.6 * cellSize;
+    const far = side < 0 ? x0 - scale : x0 + w + scale;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate((dirX / n) * dist, (dirY / n) * dist);
+    ctx.beginPath();
+    ctx.moveTo(x0 + EGG_SPLIT[0].x * scale, y0 - scale);
+    for (const q of EGG_SPLIT) ctx.lineTo(x0 + q.x * scale, y0 + q.y * scale);
+    ctx.lineTo(x0 + EGG_SPLIT[EGG_SPLIT.length - 1].x * scale, y0 + h + scale);
+    ctx.lineTo(far, y0 + h + scale);
+    ctx.lineTo(far, y0 - scale);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(eggCv, x0, y0, w, h);
+    ctx.restore();
+  }
+
   function drawHatch(e) {
     const cx = boardPx / 2, cy = boardPx / 2;
+    const scale = eggPixelSize();
     if (e < HATCH_SHAKE) {
       const p = e / HATCH_SHAKE;
-      const angle = Math.sin(e / 55) * (0.05 + 0.22 * p);
-      const bob = Math.sin(e / 70) * cellSize * 0.05 * p;
-      buildEggArt(-e / 600);            // the gradient races as the shell strains
-      drawEggAt(cx, cy + bob, angle, cellSize * EGG_SCALE, 1, 0.3 + 0.7 * p);
+      const kick = Math.round(Math.sin(e / 38) * (1 + 3 * p));
+      const bob = Math.round(Math.sin(e / 52) * 2 * p);
+      paintEggPixels(EGG_GRIDS[POKE_TARGET], -e / 600);   // the gradient races as the shell strains
+      drawEggPixels(cx + kick * scale, cy + bob * scale, scale, 0.3 + 0.7 * p);
       return;
     }
     const p = Math.min(1, (e - HATCH_SHAKE) / HATCH_BURST);
-    buildEggArt(-HATCH_SHAKE / 600);
+    paintEggPixels(EGG_GRIDS[POKE_TARGET], -HATCH_SHAKE / 600);
     if (p < 0.3) {
       ctx.save();
       ctx.globalAlpha = (1 - p / 0.3) * 0.55;
@@ -1272,8 +1230,8 @@
     const pose = poseGecko();
     if (pose) renderGecko(pose);
     ctx.restore();
-    drawEggShard(-1, cx, cy, cellSize * EGG_SCALE, p);
-    drawEggShard(1, cx, cy, cellSize * EGG_SCALE, p);
+    drawEggShard(-1, cx, cy, scale, p);
+    drawEggShard(1, cx, cy, scale, p);
   }
 
   // ================= drawing =================
@@ -1374,12 +1332,25 @@
 
   }
 
-  function drawClock(now) {
-    const label = phase === 'rewind' ? clock.toFixed(1) : clock.toFixed(1);
-    ctx.fillStyle = phase === 'rewind' ? 'rgba(111,211,242,0.55)' : 'rgba(242,201,76,0.45)';
+  function drawClock() {
+    const rewinding = phase === 'rewind';
+    const tint = rewinding ? '111,211,242' : '242,201,76';
+    const label = clock.toFixed(1) + 's';
+    const right = GRID * cellSize - cellSize * 0.25;
+    const bottom = GRID * cellSize - cellSize * 0.1;
     ctx.font = Math.round(cellSize * 1.4) + 'px ' + GAME_FONT;
     ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillText(label + 's', GRID * cellSize - cellSize * 0.25, GRID * cellSize - cellSize * 0.1);
+    ctx.fillStyle = 'rgba(' + tint + ',' + (rewinding ? 0.55 : 0.45) + ')';
+    ctx.fillText(label, right, bottom);
+
+    // how much of the phase is still to come, standing faintly beside the number
+    const left = right - ctx.measureText(label).width - cellSize * 0.42;
+    const h = cellSize * 1.02, w = Math.max(2, cellSize * 0.09);
+    const remain = Math.max(0, Math.min(1, (rewinding ? clock : duration - clock) / duration));
+    ctx.fillStyle = 'rgba(' + tint + ',0.10)';
+    ctx.fillRect(left, bottom - h, w, h);
+    ctx.fillStyle = 'rgba(' + tint + ',0.28)';
+    ctx.fillRect(left, bottom - h * remain, w, h * remain);
   }
 
   function stepEffects(dt) {
@@ -1461,10 +1432,8 @@
     const pose = poseGecko();
     drawGhost(pose, now);
     if (pose) renderGecko(pose);
-    drawClock(now);
+    drawClock();
     applyInversion(now);
-    const frac = clock / duration;
-    barEl.style.width = (frac * 100) + '%';
   }
 
   function loop(t) {
@@ -1543,9 +1512,16 @@
     const d = keyMap[e.key]; if (d) { e.preventDefault(); pressed[d] = false; }
   });
 
-  msgBtn.addEventListener('click', () => {
-    if (msgState.kind === 'boot') startHatch();
-    else { buildStage(); startForward(); }
+  msgBtn.addEventListener('click', () => { buildStage(); startForward(); });
+
+  // the shell gives a little more each time it is struck, then breaks open
+  canvas.addEventListener('pointerdown', e => {
+    if (phase !== 'idle') return;
+    const r = canvas.getBoundingClientRect();
+    if (!eggHit((e.clientX - r.left) / r.width * boardPx, (e.clientY - r.top) / r.height * boardPx)) return;
+    pokes++;
+    pokeAt = performance.now();
+    if (pokes >= POKE_TARGET) startHatch(); else renderMsg();
   });
   window.addEventListener('resize', resize);
 
