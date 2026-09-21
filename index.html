@@ -174,6 +174,7 @@
       clearText: 'ハエも逆行ハエも、ぜんぶ食べきった！',
       hintStage3: 'ここからハエが跳びはじめる！',
       hintStageMore: 'ハエの跳ぶ間隔が、さらに短くなる',
+      hintStage6: 'ここから盤が暗くなる。灯りの当たった先しか見えない',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -195,6 +196,7 @@
       clearText: 'Every fly is eaten, forward and blue alike!',
       hintStage3: 'Flies start hopping from here!',
       hintStageMore: 'Flies now hop at shorter intervals',
+      hintStage6: 'The board goes dark — you only see what the lights fall on',
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -222,6 +224,7 @@
       msgTitle.textContent = s.stageClearTitle(cleared);
       let t = s.clearText;
       if (cleared === 2) t += '\n' + s.hintStage3;
+      else if (cleared === 5) t += '\n' + s.hintStage6;
       else if (cleared >= 3) t += '\n' + s.hintStageMore;
       msgText.textContent = t;
       msgBtn.style.display = '';
@@ -767,6 +770,7 @@
               moving: false, walkPhase: 0, swing: 0 };
     track = [{ t: 0, x: gecko.x, y: gecko.y, a: 0, p: 0 }];
     clock = 0;
+    buildLights();
     stageEl.textContent = stage;
     updateCounts();
   }
@@ -1394,6 +1398,7 @@
 
   function stepEffects(dt) {
     if (phase === 'rewind') erosion = Math.min(1, erosion + dt / 4.8);
+    stepLights(dt);
   }
 
   function angDiff(a, b) {
@@ -1446,6 +1451,60 @@
     return path;
   }
 
+  // From DARK_STAGE on, the board is unlit: a few lights wander it at random and
+  // only what they touch can be seen. The gecko carries a small one of its own,
+  // otherwise there would be no way to steer between the sweeps.
+  const DARK_STAGE = 6;
+  const darkCv = document.createElement('canvas');
+  const dkctx = darkCv.getContext('2d');
+  let lights = [];
+
+  function buildLights() {
+    lights = stage < DARK_STAGE ? [] : Array.from({ length: 3 }, () => ({
+      x: Math.random() * GRID, y: Math.random() * GRID,
+      tx: Math.random() * GRID, ty: Math.random() * GRID,
+      r: 1.9 + Math.random() * 1.1,
+      speed: 0.9 + Math.random() * 0.9
+    }));
+  }
+
+  function stepLights(dt) {
+    lights.forEach(L => {
+      const dx = L.tx - L.x, dy = L.ty - L.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.3) { L.tx = Math.random() * GRID; L.ty = Math.random() * GRID; return; }
+      L.x += (dx / d) * L.speed * dt;
+      L.y += (dy / d) * L.speed * dt;
+    });
+  }
+
+  function applyDarkness(pose) {
+    if (!lights.length) return;
+    if (darkCv.width !== canvas.width) { darkCv.width = canvas.width; darkCv.height = canvas.height; }
+    const dpr = canvas.width / Math.max(1, boardPx);
+    dkctx.setTransform(1, 0, 0, 1, 0, 0);
+    dkctx.globalCompositeOperation = 'source-over';
+    dkctx.fillStyle = '#000';
+    dkctx.fillRect(0, 0, darkCv.width, darkCv.height);
+    dkctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dkctx.globalCompositeOperation = 'destination-out';
+    const hole = (cx, cy, r) => {
+      const g = dkctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      dkctx.fillStyle = g;
+      dkctx.beginPath();
+      dkctx.arc(cx, cy, r, 0, Math.PI * 2);
+      dkctx.fill();
+    };
+    lights.forEach(L => hole(L.x * cellSize, L.y * cellSize, L.r * cellSize));
+    if (pose) hole(pose.x * cellSize, pose.y * cellSize, cellSize * 1.2);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(darkCv, 0, 0);
+    ctx.restore();
+  }
+
   function invertRegion(path) {
     ctx.save();
     ctx.globalCompositeOperation = 'difference';
@@ -1471,6 +1530,7 @@
     const pose = poseGecko();
     drawGhost(pose, now);
     if (pose) renderGecko(pose);
+    applyDarkness(pose);
     drawClock();
     applyInversion(now);
   }
