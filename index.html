@@ -77,6 +77,8 @@
     color: var(--cream); transition: background 0.4s;
   }
   #msg.boot { justify-content: space-between; background: rgba(8,8,10,0.30); pointer-events: none; }
+  #msg.boot button { pointer-events: auto; }
+  #msgBody { display: flex; flex-direction: column; align-items: center; }
   #msg h2 { margin: 0 0 10px 0; font-size: 26px; font-weight: 400; letter-spacing: 0.06em; }
   #msg p { white-space: pre-line; margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; max-width: 30em; }
   #msg button {
@@ -166,8 +168,10 @@
     <canvas id="game"></canvas>
     <div id="msg">
       <h2 id="msgTitle"></h2>
-      <p id="msgText"></p>
-      <button id="msgBtn">スタート</button>
+      <div id="msgBody">
+        <p id="msgText"></p>
+        <button id="msgBtn">スタート</button>
+      </div>
     </div>
   </div>
   <div id="controls">
@@ -251,6 +255,7 @@
       speedWord: '逆行の速さ',
       themeWord: '配色',
       close: '閉じる',
+      continueFrom: n => 'ステージ ' + n + ' から続ける',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -285,6 +290,7 @@
       speedWord: 'Rewind speed',
       themeWord: 'Palette',
       close: 'Close',
+      continueFrom: n => 'Continue from stage ' + n,
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -308,17 +314,37 @@
   // Warm accent marks the run forward, cool accent the rewind, and the two have
   // to stay tellable apart at a glance in every palette.
   const THEMES = [
-    { name: { ja: 'ノワール', en: 'Noir' }, bg: '#111214', boot: '#44464c', rim: '#000',
+    { name: { ja: 'ノワール', en: 'Noir' }, bg: '#111214', boot: '#44464c',
       dark: '#0d0d0e', light: '#3a3b3e', gold: [242, 201, 76], blue: [111, 211, 242], inv: '#e9e6dc' },
-    { name: { ja: 'サンセット', en: 'Sunset' }, bg: '#17101a', boot: '#4c3f52', rim: '#0b060d',
+    { name: { ja: 'サンセット', en: 'Sunset' }, bg: '#17101a', boot: '#4c3f52',
       dark: '#150d19', light: '#42304a', gold: [255, 173, 92], blue: [167, 150, 255], inv: '#efe4e9' },
-    { name: { ja: 'フォレスト', en: 'Forest' }, bg: '#0d1511', boot: '#3f4f45', rim: '#050a07',
+    { name: { ja: 'フォレスト', en: 'Forest' }, bg: '#0d1511', boot: '#3f4f45',
       dark: '#0a120d', light: '#2d3d33', gold: [226, 209, 106], blue: [110, 224, 184], inv: '#e3e9de' },
-    { name: { ja: 'モノクロ', en: 'Mono' }, bg: '#121212', boot: '#4a4a4a', rim: '#000',
+    { name: { ja: 'モノクロ', en: 'Mono' }, bg: '#121212', boot: '#4a4a4a',
       dark: '#0e0e0e', light: '#3c3c3c', gold: [234, 234, 234], blue: [138, 138, 138], inv: '#e8e8e8' }
   ];
   let themeIndex = 0;
   let TH = THEMES[0];
+
+  // Settings and the furthest stage reached are kept in the browser. A blocked or
+  // corrupt store just means starting fresh, never a broken game.
+  const SAVE_KEY = 'rewind-gecko';
+  let savedStage = 1;
+  function loadSave() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+      if (THEMES[d.theme]) themeIndex = d.theme;
+      if (d.speed === 1 || d.speed === 1.5 || d.speed === 2) rewindSpeed = d.speed;
+      if (d.lang === 'ja' || d.lang === 'en') lang = d.lang;
+      if (d.stage >= 1 && d.stage <= FINAL_STAGE) savedStage = Math.floor(d.stage);
+    } catch (e) { /* nothing worth keeping */ }
+  }
+  function writeSave() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(
+        { stage: savedStage, theme: themeIndex, speed: rewindSpeed, lang: lang }));
+    } catch (e) { /* private browsing: play on without saving */ }
+  }
 
   function renderThemeSeg() {
     themeSeg.innerHTML = '';
@@ -327,7 +353,7 @@
       b.type = 'button';
       b.textContent = t.name[lang];
       if (i === themeIndex) b.classList.add('on');
-      b.addEventListener('click', () => { themeIndex = i; applyTheme(); });
+      b.addEventListener('click', () => { themeIndex = i; applyTheme(); writeSave(); });
       themeSeg.appendChild(b);
     });
   }
@@ -349,7 +375,8 @@
     if (msgState.kind === 'boot') {
       msgTitle.textContent = s.title;
       msgText.textContent = pokes === 0 ? s.pokeHint : s.pokeMore(POKE_TARGET - pokes);
-      msgBtn.style.display = 'none';
+      msgBtn.style.display = savedStage > 1 ? '' : 'none';
+      if (savedStage > 1) msgBtn.textContent = s.continueFrom(savedStage);
     } else if (msgState.kind === 'win') {
       msgTitle.textContent = s.winTitle;
       msgText.textContent = s.winText;
@@ -391,6 +418,7 @@
   langBtn.addEventListener('click', () => {
     lang = lang === 'ja' ? 'en' : 'ja';
     applyLang();
+    writeSave();
   });
 
   const GRID = 12;
@@ -992,6 +1020,8 @@
     if (okW && okB) {
       msgState = { kind: stage >= FINAL_STAGE ? 'win' : 'clear', clearedStage: stage };
       stage++;
+      savedStage = stage > FINAL_STAGE ? 1 : stage;   // a finished run starts over
+      writeSave();
     } else {
       msgState = {
         kind: 'fail',
@@ -1028,10 +1058,23 @@
   // The arena is a disc, and a disc turns onto itself at every angle. That is
   // what keeps a blue fly's mirrored target on the board however the ghost is
   // turned — nothing can ever be placed somewhere the gecko cannot reach.
-  const ARENA_R = GRID / 2;                 // cells: the disc fills the square canvas
+  const ARENA_R = GRID / 2 - 0.8;           // cells: inset, so the rim reads as a rim
   const PLAY_C = (GRID - 1) / 2;
-  const GECKO_R = ARENA_R - 1.8;            // far enough in that the tail stays on the board
-  const PLAY_R = ARENA_R - 1.4;             // and how far out a fly may sit
+  const PLAY_R = ARENA_R - 0.8;             // how far out a fly may sit
+  // The sprite reaches further behind its anchor than ahead of it, so a single
+  // stand-off radius would hold the gecko short of the rim whenever it faced
+  // outward — the wall would feel invisible. Ask instead how far the body
+  // actually sticks out the way the rim lies, and stop only there.
+  const REACH_AHEAD = 1.25, REACH_BEHIND = 1.8, REACH_ACROSS = 0.6;
+  function geckoReach(facing) {
+    const along = Math.max(REACH_AHEAD * facing, -REACH_BEHIND * facing);
+    return along + REACH_ACROSS * Math.sqrt(Math.max(0, 1 - facing * facing));
+  }
+  // how far the anchor may sit from the middle, given where it stands and faces
+  function geckoLimit(rx, ry, rd, angle) {
+    if (rd < 1e-6) return ARENA_R - REACH_BEHIND;
+    return ARENA_R - geckoReach((Math.sin(angle) * rx - Math.cos(angle) * ry) / rd);
+  }
   function arenaPath(g) {
     g.beginPath();
     g.arc(boardPx / 2, boardPx / 2, ARENA_R * cellSize, 0, Math.PI * 2);
@@ -1098,7 +1141,7 @@
       // pressed against the rim: drop the part of the push that aims out of the
       // arena, so the gecko slides around it rather than shoving into it
       const rx = gecko.x - PLAY_C, ry = gecko.y - PLAY_C, rd = Math.hypot(rx, ry);
-      if (rd > GECKO_R - 0.06) {
+      if (rd > geckoLimit(rx, ry, rd, gecko.angle) - 0.06) {
         const out = (ux * rx + uy * ry) / rd;
         if (out > 0) { ux -= (rx / rd) * out; uy -= (ry / rd) * out; }
       }
@@ -1117,8 +1160,11 @@
       const pace = SPEED * mag * Math.max(0.2, align);
       gecko.x += Math.sin(gecko.angle) * pace * dt;
       gecko.y -= Math.cos(gecko.angle) * pace * dt;
+    }
+    {
       const rx = gecko.x - PLAY_C, ry = gecko.y - PLAY_C, rd = Math.hypot(rx, ry);
-      if (rd > GECKO_R) { gecko.x = PLAY_C + rx / rd * GECKO_R; gecko.y = PLAY_C + ry / rd * GECKO_R; }
+      const lim = geckoLimit(rx, ry, rd, gecko.angle);
+      if (rd > lim) { gecko.x = PLAY_C + rx / rd * lim; gecko.y = PLAY_C + ry / rd * lim; }
     }
     // one gait cycle per CYCLE_LEN of travel, so planted feet stay put on the board,
     // but never faster than a real gecko can step (spins no longer make the legs flicker)
@@ -1490,9 +1536,12 @@
       }
     }
     ctx.restore();
+  }
+
+  function drawRim() {
     arenaPath(ctx);
-    ctx.lineWidth = Math.max(2, cellSize * 0.07);
-    ctx.strokeStyle = TH.rim;
+    ctx.lineWidth = Math.max(2, cellSize * 0.08);
+    ctx.strokeStyle = 'rgba(146,148,156,0.9)';
     ctx.stroke();
   }
 
@@ -1698,7 +1747,7 @@
   }
 
   function nextSpot() {
-    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * GECKO_R;
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * PLAY_R;
     return { x: PLAY_C + Math.cos(a) * d, y: PLAY_C + Math.sin(a) * d };
   }
 
@@ -1762,14 +1811,15 @@
 
   function draw(now) {
     drawBoard();
-    if (phase === 'idle') { drawFlies(now); drawEggIdle(now); return; }
-    if (phase === 'hatch') { drawHatch(now - hatchStart); return; }
+    if (phase === 'idle') { drawFlies(now); drawEggIdle(now); drawRim(); return; }
+    if (phase === 'hatch') { drawHatch(now - hatchStart); drawRim(); return; }
     drawFlies(now);
     const pose = poseGecko();
     drawGhost(pose, now);
     if (pose) renderGecko(pose);
     applyDarkness(pose);
     applyInversion(now);
+    drawRim();
     drawClock();
   }
 
@@ -1845,6 +1895,7 @@
   });
 
   msgBtn.addEventListener('click', () => {
+    if (msgState.kind === 'boot') { stage = savedStage; startHatch(); return; }
     if (msgState.kind === 'win') stage = 1;
     buildStage();
     startForward();
@@ -1861,6 +1912,7 @@
   speedBtns.forEach(b => b.addEventListener('click', () => {
     rewindSpeed = parseFloat(b.dataset.sp);
     speedBtns.forEach(o => o.classList.toggle('on', o === b));
+    writeSave();
   }));
 
   gearBtn.addEventListener('click', () => settingsEl.classList.add('on'));
@@ -1882,6 +1934,8 @@
 
   // ================= boot =================
   resize();
+  loadSave();
+  speedBtns.forEach(b => b.classList.toggle('on', parseFloat(b.dataset.sp) === rewindSpeed));
   applyTheme();
   buildStage();
   phase = 'idle';
