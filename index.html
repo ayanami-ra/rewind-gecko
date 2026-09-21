@@ -69,7 +69,7 @@
     position: absolute; inset: 0; display: none;
     flex-direction: column; align-items: center; justify-content: center;
     background: rgba(8,8,10,0.86); text-align: center; padding: 20px;
-    transition: background 0.4s;
+    color: var(--cream); transition: background 0.4s;
   }
   #msg.boot { justify-content: space-between; background: rgba(8,8,10,0.30); pointer-events: none; }
   #msg h2 { margin: 0 0 10px 0; font-size: 26px; font-weight: 400; letter-spacing: 0.06em; }
@@ -175,6 +175,13 @@
       hintStage3: 'ここからハエが跳びはじめる！',
       hintStageMore: 'ハエの跳ぶ間隔が、さらに短くなる',
       hintStage6: 'ここから盤が暗くなる。灯りの当たった先しか見えない',
+      hintStage11: 'ここから影が真後ろではなく、90度ずれた先に立つ',
+      hintStage16: 'ここから影のずれは45度。盤もまた暗くなる',
+      hintStage21: 'ここから影のずれる向きが、ステージごとに変わる',
+      hintStage26: '最後の5ステージ。向きは読めず、盤も暗い',
+      winTitle: 'Congratulations!',
+      winText: '全30ステージ走りきった。時間を丸ごと食べ尽くした！',
+      again: 'もう一度',
       next: '次のステージへ',
       failTitle: '失敗…',
       failText: (whiteLeft, blueLeft) => {
@@ -197,6 +204,13 @@
       hintStage3: 'Flies start hopping from here!',
       hintStageMore: 'Flies now hop at shorter intervals',
       hintStage6: 'The board goes dark — you only see what the lights fall on',
+      hintStage11: 'Your shadow now stands a quarter turn away, not behind you',
+      hintStage16: 'The shadow shifts by an eighth turn — and the lights are back',
+      hintStage21: 'The direction of the shift changes with every stage',
+      hintStage26: 'The last five: the angle is anyone\'s guess, and the board is dark',
+      winTitle: 'Congratulations!',
+      winText: 'All 30 stages run — you ate the whole timeline!',
+      again: 'Play again',
       next: 'Next Stage',
       failTitle: 'Failed...',
       failText: (whiteLeft, blueLeft) => {
@@ -219,12 +233,18 @@
       msgTitle.textContent = s.title;
       msgText.textContent = pokes === 0 ? s.pokeHint : s.pokeMore(POKE_TARGET - pokes);
       msgBtn.style.display = 'none';
+    } else if (msgState.kind === 'win') {
+      msgTitle.textContent = s.winTitle;
+      msgText.textContent = s.winText;
+      msgBtn.style.display = '';
+      msgBtn.textContent = s.again;
     } else if (msgState.kind === 'clear') {
       const cleared = msgState.clearedStage;
+      const bandHint = { 2: s.hintStage3, 5: s.hintStage6, 10: s.hintStage11,
+                         15: s.hintStage16, 20: s.hintStage21, 25: s.hintStage26 };
       msgTitle.textContent = s.stageClearTitle(cleared);
       let t = s.clearText;
-      if (cleared === 2) t += '\n' + s.hintStage3;
-      else if (cleared === 5) t += '\n' + s.hintStage6;
+      if (bandHint[cleared]) t += '\n' + bandHint[cleared];
       else if (cleared >= 3) t += '\n' + s.hintStageMore;
       msgText.textContent = t;
       msgBtn.style.display = '';
@@ -612,7 +632,7 @@
     gctx.clearRect(0, 0, ghostCv.width, ghostCv.height);
     gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const c = boardPx / 2;
-    gctx.translate(c, c); gctx.rotate(Math.PI); gctx.translate(-c, -c);
+    gctx.translate(c, c); gctx.rotate(ghostAngle); gctx.translate(-c, -c);
     dctx = gctx;
     renderGecko(pose);
     dctx = ctx;
@@ -709,9 +729,9 @@
         const d = reach * (0.55 + Math.random() * 0.45);
         nx = x + Math.cos(a) * d; ny = y + Math.sin(a) * d;
         tries++;
-      } while ((nx < 0.8 || ny < 0.8 || nx > GRID - 1.8 || ny > GRID - 1.8) && tries < 20);
-      nx = Math.min(GRID - 1.8, Math.max(0.8, nx));
-      ny = Math.min(GRID - 1.8, Math.max(0.8, ny));
+      } while (!inPlay(nx, ny) && tries < 20);
+      const q = clampPlay({ x: nx, y: ny });
+      nx = q.x; ny = q.y;
       f.hops.push({ t0: t, t1: t + HOP_DUR, x0: x, y0: y, x1: nx, y1: ny,
                     rot: Math.atan2(ny - y, nx - x) - FLY_HEAD });
       x = nx; y = ny;
@@ -736,6 +756,7 @@
   }
 
   function buildStage() {
+    setStageRules();
     const nWhite = Math.min(3 + stage, 7);
     const nBlue = Math.min(1 + Math.floor(stage / 2), 4);
     duration = 12 + nBlue * 2;
@@ -748,8 +769,8 @@
         x = 1 + Math.random() * (GRID - 3);
         y = 1 + Math.random() * (GRID - 3);
         tries++;
-      } while (!farEnough(x, y, all, 1.8) && tries < 60);
-      return { x: x, y: y };
+      } while ((!farEnough(x, y, all, 1.8) || !inPlay(x, y)) && tries < 60);
+      return clampPlay({ x: x, y: y });
     };
     for (let i = 0; i < nWhite; i++) {
       const p = place(); p.eaten = false; p.rot = Math.random() * Math.PI * 2; p.seed = Math.random() * 100;
@@ -840,7 +861,7 @@
     const okW = whites.every(f => f.eaten);
     const okB = blues.every(f => f.eaten);
     if (okW && okB) {
-      msgState = { kind: 'clear', clearedStage: stage };
+      msgState = { kind: stage >= FINAL_STAGE ? 'win' : 'clear', clearedStage: stage };
       stage++;
     } else {
       msgState = {
@@ -854,8 +875,46 @@
   }
 
   // the rewind runs the route point-mirrored through the middle of the board
-  function mirrorX(x) { return (GRID - 1) - x; }
-  function mirrorY(y) { return (GRID - 1) - y; }
+  // Stages run in bands of five. Each band turns the ghost through a different
+  // angle, and every other band from the sixth on plays the board unlit.
+  const FINAL_STAGE = 30;
+  let ghostAngle = Math.PI;
+  let ghostSquare = true;   // does that angle still map the square board onto itself?
+  let lit = false;
+
+  function setStageRules() {
+    const band = Math.floor((stage - 1) / 5);
+    ghostAngle = band <= 1 ? Math.PI
+      : band === 2 ? Math.PI / 2
+      : band === 3 ? Math.PI / 4
+      : Math.random() * Math.PI * 2;
+    ghostSquare = Math.abs(Math.sin(2 * ghostAngle)) < 1e-6;
+    lit = band >= 1 && band % 2 === 1;
+  }
+
+  function mirrorPt(x, y) {
+    const c = Math.cos(ghostAngle), sn = Math.sin(ghostAngle);
+    const dx = x - PLAY_C, dy = y - PLAY_C;
+    return { x: PLAY_C + dx * c - dy * sn, y: PLAY_C + dx * sn + dy * c };
+  }
+
+  // A quarter turn leaves the square board covering itself, so flies may sit
+  // anywhere. At any other angle they have to keep to the disc that does, or a
+  // blue fly's mirrored target would fall off the board and be uncatchable.
+  const PLAY_LO = 0.8, PLAY_HI = GRID - 1.8;
+  const PLAY_C = (GRID - 1) / 2, PLAY_R = GRID / 2 - 1;
+  function inPlay(x, y) {
+    if (x < PLAY_LO || y < PLAY_LO || x > PLAY_HI || y > PLAY_HI) return false;
+    return ghostSquare || Math.hypot(x - PLAY_C, y - PLAY_C) <= PLAY_R;
+  }
+  function clampPlay(p) {
+    p.x = Math.min(PLAY_HI, Math.max(PLAY_LO, p.x));
+    p.y = Math.min(PLAY_HI, Math.max(PLAY_LO, p.y));
+    if (ghostSquare) return p;
+    const dx = p.x - PLAY_C, dy = p.y - PLAY_C, d = Math.hypot(dx, dy);
+    if (d > PLAY_R) { p.x = PLAY_C + dx / d * PLAY_R; p.y = PLAY_C + dy / d * PLAY_R; }
+    return p;
+  }
 
   function mouthPos(g) {
     return { x: g.x + Math.sin(g.angle) * MOUTH, y: g.y - Math.cos(g.angle) * MOUTH };
@@ -949,7 +1008,7 @@
     });
 
     // blue flies are judged against the mirrored route, not where you actually are
-    const gm = { x: mirrorX(m.x), y: mirrorY(m.y) };
+    const gm = mirrorPt(m.x, m.y);
     blues.forEach(f => {
       if (!f.locked && Math.abs(clock - f.t) < BLUE_WINDOW &&
           Math.hypot(flyAt(f, clock).x - gm.x, flyAt(f, clock).y - gm.y) < EAT_R) {
@@ -965,8 +1024,9 @@
     const s = sampleTrack(Math.max(0, clock));
     if (s) {
       const prev = { x: gecko.x, y: gecko.y };
-      gecko.x = mirrorX(s.x); gecko.y = mirrorY(s.y);
-      gecko.angle = s.a + Math.PI; gecko.walkPhase = s.p;
+      const mp = mirrorPt(s.x, s.y);
+      gecko.x = mp.x; gecko.y = mp.y;
+      gecko.angle = s.a + ghostAngle; gecko.walkPhase = s.p;
       const moved = Math.hypot(gecko.x - prev.x, gecko.y - prev.y) / Math.max(dt, 1e-6);
       gecko.swing = Math.min(1, moved / SPEED);
       gecko.moving = gecko.swing > 0.05;
@@ -1294,9 +1354,8 @@
       for (let i = 0; i < track.length; i++) {
         const s0 = track[i];
         if (s0.t < from || s0.t > to) { started = false; continue; }
-        const px = mirror ? mirrorX(s0.x) : s0.x;
-        const py = mirror ? mirrorY(s0.y) : s0.y;
-        const x = (px + 0.5) * cellSize, y = (py + 0.5) * cellSize;
+        const p = mirror ? mirrorPt(s0.x, s0.y) : s0;
+        const x = (p.x + 0.5) * cellSize, y = (p.y + 0.5) * cellSize;
         if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
       }
       ctx.strokeStyle = style;
@@ -1451,16 +1510,15 @@
     return path;
   }
 
-  // From DARK_STAGE on, the board is unlit: a few lights wander it at random and
-  // only what they touch can be seen. The gecko carries a small one of its own,
-  // otherwise there would be no way to steer between the sweeps.
-  const DARK_STAGE = 6;
+  // On an unlit band a few lights wander the board at random and only what they
+  // touch can be seen. The gecko carries a small one of its own, otherwise there
+  // would be no way to steer between the sweeps.
   const darkCv = document.createElement('canvas');
   const dkctx = darkCv.getContext('2d');
   let lights = [];
 
   function buildLights() {
-    lights = stage < DARK_STAGE ? [] : Array.from({ length: 3 }, () => ({
+    lights = !lit ? [] : Array.from({ length: 3 }, () => ({
       x: Math.random() * GRID, y: Math.random() * GRID,
       tx: Math.random() * GRID, ty: Math.random() * GRID,
       r: 1.9 + Math.random() * 1.1,
@@ -1498,7 +1556,7 @@
       dkctx.fill();
     };
     lights.forEach(L => hole(L.x * cellSize, L.y * cellSize, L.r * cellSize));
-    if (pose) hole(pose.x * cellSize, pose.y * cellSize, cellSize * 1.2);
+    if (pose) hole((pose.x + 0.5) * cellSize, (pose.y + 0.5) * cellSize, cellSize * 1.2);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(darkCv, 0, 0);
@@ -1611,7 +1669,11 @@
     const d = keyMap[e.key]; if (d) { e.preventDefault(); pressed[d] = false; }
   });
 
-  msgBtn.addEventListener('click', () => { buildStage(); startForward(); });
+  msgBtn.addEventListener('click', () => {
+    if (msgState.kind === 'win') stage = 1;
+    buildStage();
+    startForward();
+  });
 
   // the shell gives a little more each time it is struck, then breaks open
   canvas.addEventListener('pointerdown', e => {
